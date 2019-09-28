@@ -5,8 +5,7 @@ from shapely.geometry import Point, LineString, Polygon, MultiPolygon
 	Lanelet2 parser for LGSVL Simulator:
 
 	Parses an OSM-XML file that uses the Lanelet2 framework 
-	and processes its elements into objects that Scenic can 
-	understand and use.
+	and stores its data as fields of a MapData class.
 	-----
 	@author Francis Indaheng
 	
@@ -232,18 +231,3 @@ class MapData:
 				raise RuntimeError(f'Unknown relation type with id={relation_id}')
 
 		__execute_todo()  # add stored unparsed regulatory elements to corresponding lanelets
-
-
-class Road:
-	def __init__(self, drive_on_right=True):
-		self.lanelets = []
-		self.drive_on_right = drive_on_right
-
-
-class MapRepresentation:
-	''' Uses map data extracted from an OSM-XML file to construct 
-	an higher level representation of the map layout '''
-
-	def __init__(self):
-		self.roads = {}
-		self.junctions = {}

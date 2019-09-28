@@ -1,9 +1,18 @@
 import lanelet2_parser as parser
 
-''' Used to test Lanelet2 Parser '''
+""" 
+	Testing site:
+	
+	Runs results of Lanelet2 Parser and Map Representation.
+	-----
+	@author Francis Indaheng
+	
+	Developed with VeHICaL and all associated 
+	groups, projects, and persons.
+"""
 
 if __name__ == '__main__':
-	path = './example_map.osm'
+	path = './maps/example_map.osm'
 	data = parser.MapData()
 	data.parse(path)
 
