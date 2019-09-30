@@ -1,5 +1,5 @@
 import xml.etree.ElementTree as ET
-from shapely.geometry import Point, LineString, Polygon, MultiPolygon
+from shapely.geometry import Point, LineString, Polygon
 
 """ 
 	Lanelet2 parser for LGSVL Simulator:
@@ -19,7 +19,7 @@ class L2_Point:
 
 	def __init__(self, id_, point=None):
 		self.id_ = id_
-		self.point = point
+		self.point = point  # Shapely Point
 
 
 class L2_Linestring:
@@ -28,8 +28,8 @@ class L2_Linestring:
 
 	def __init__(self, id_, linestring, type_, subtype=None):
 		self.id_ = id_
-		self.linestring = linestring
-		self.type_ = type_
+		self.linestring = linestring  # Shapely LineString
+		self.type_ = type_ 
 		self.subtype = subtype
 
 
@@ -39,7 +39,7 @@ class L2_Polygon:
 
 	def __init__(self, id_, polygon, type_, subtype=None):
 		self.id_ = id_
-		self.polygon = polygon
+		self.polygon = polygon  # Shapely Polygon
 		self.type_ = type_
 		self.subtype = subtype
 
@@ -58,13 +58,13 @@ class Lanelet():
 
 
 class Area():
-	''' Multipolygonal region representing undirected traffic 
-	that can have multiple entry and exit points using
-	Shapely's MultiPolygon class '''
+	''' Ordered list of linestrings representing undirected traffic 
+	that can have multiple entry and exit points '''
 
-	def __init__(self, id_, multipolygon=None):
+	def __init__(self, id_, outer_linestrings, inner_linestrings):
 		self.id_ = id_
-		self.multipolygon = multipolygon
+		self.outer_linestrings = outer_linestrings
+		self.inner_linestrings = inner_linestrings
 
 
 class RegulatoryElement():
@@ -73,7 +73,6 @@ class RegulatoryElement():
 
 	def __init__(self, id_, subtype):
 		self.id_ = id_
-		self.type = 'regulatory_element'
 		self.subtype = subtype
 
 
@@ -89,9 +88,8 @@ class MapData:
 		self.areas = {}
 		self.regulatory_elements = {}
 
-		# Stores regulatory element id, the object of which is to be appended after parsing finishes
-		# List of (Lanelet id, Value = Regulatory Element id)
-		self.__todo_unparsed_refs = []
+		# store id's of regulatory elements to add to a lanelet objects after parsing completes (such that the regulatory elements have been processed)
+		self.__todo_lanelets_regelems = []  # list of tuples in the form: (lanelet id, regulatory_element id)
 
 	def parse(self, path):
 
@@ -127,7 +125,7 @@ class MapData:
 						reg_elem = self.regulatory_elements[ref_id]
 						lanelet.regulatory_elements.append(reg_elem)
 					except:
-					 	self.__todo_unparsed_refs.append((id_, ref_id))  # regulatory element not yet parsed -> add after parsing complete
+					 	self.__todo_lanelets_regelems.append((id_, ref_id))  # regulatory element not yet parsed -> add after parsing complete
 				else:
 					raise RuntimeError(f'Unknown member role in lanelet with id={id_}')
 
@@ -135,26 +133,27 @@ class MapData:
 			self.lanelets[id_] = lanelet
 
 		def __extract_area(id_, relation_element):
-			shapely_multipolygon = MultiPolygon()
-
-			# TODO: Construct information to pass into Shapely's MultiPolygon class
 			for member in relation_element.iter('member'):
 				member_role = member.get('role')
+				ref_id = int(member.get('ref'))
+
+				outer = []  # id's of linestrings forming outer bound
+				inner = []  # id's of linestrings forming inner hole
 
 				if member_role == 'outer':
-					continue  # FIXME: placeholder
+					outer.append(self.linestrings[ref_id])
 				elif member_role == 'inner':
-					continue  # FIXME: placeholder
+					inner.append(self.linestrings[ref_id])
 				else:
-					raise RuntimeError(f'Unknown member role in area with id={id_}')
+					raise RuntimeError(f'Unknown member role={member_role} in area with id={id_}')
 
-			self.areas[id_] = Area(id_, shapely_multipolygon)
+			self.areas[id_] = Area(id_, outer, inner)
 
 		def __extract_regulatory_element(id_, subtype):
 			self.regulatory_elements[id_] = RegulatoryElement(id_, subtype)
 
 		def __execute_todo():
-			for lanelet_id, reg_elem_id in self.__todo_unparsed_refs:
+			for lanelet_id, reg_elem_id in self.__todo_lanelets_regelems:
 				try:
 					lanelet = self.lanelets[lanelet_id]
 					reg_elem = self.regulatory_elements[reg_elem_id]
@@ -196,7 +195,7 @@ class MapData:
 				elif key == 'subtype':
 					subtype_tag = value
 				else:
-					# TODO: Handle custom tags
+					# TODO: Handle other tags (location, region, one_way, etc.)
 					continue
 
 			if area_tag:  # polygon

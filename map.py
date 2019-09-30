@@ -18,6 +18,25 @@ class Road:
 		self.drive_on_right = drive_on_right
 
 
+class Junction:
+	''' Junction class from Wilson Wu's Open Drive parser '''
+
+	class Connection:
+		def __init__(self, incoming_id, connecting_id, connecting_contact):
+			self.incoming_id = incoming_id
+			self.connecting_id = connecting_id  # id of conecting road
+			self.connecting_contact = connecting_contact  # contact point ('start' or end') on connecting road
+
+	def __init__(self, id_):
+		self.id_ = id_
+		self.connections = []
+
+	def add_connection(self, incoming_id, connection_id, connecting_contact):
+		self.connections.append(
+			Junciton.Connection(incoming_id, 
+								connecting_id, 
+								connecting_contact))
+
 class MapRepresentation:
 	''' Uses map data extracted from an OSM-XML file to construct 
 	an higher level representation of the map layout '''
