@@ -14,9 +14,25 @@ from shapely.geometry import Point, LineString, Polygon
 """
 
 class Road:
-	def __init__(self, drive_on_right=True):
-		self.lanelets = []
-		self.drive_on_right = drive_on_right
+	# NOTE: No name/id info for roads in l2 format like in xodr
+	def __init__(self):
+		self.lanelets = []  # ordered from left to right
+		self.regulatory_elements = []
+
+	def calculate_polygon(self):
+		assert lanelets, 'Road contains no lanelets'
+		if len(lanelets) == 1:
+			return lanelets[0].calculate_polygon()
+		else:
+			## TODO: LEFT OFF HERE
+
+class RoadLink:
+	''' Indicates two Roads are connected such that
+	Road with id=id_a leads to Road with id=id_b '''
+
+	def __init__(self, id_a, id_b, ):
+		self.id_a = id_a
+		self.id_b = id_b
 
 
 class Junction:
@@ -38,6 +54,7 @@ class Junction:
 								connecting_id, 
 								connecting_contact))
 
+
 class MapRepresentation:
 	''' Uses map data extracted from an OSM-XML file to construct 
 	an higher level representation of the map layout '''
@@ -50,4 +67,4 @@ class MapRepresentation:
 		self.junctions = {}
 
 	def construct(self):
-
+		# NOTE: How to go about constructing an organized map from data with no indication of placement in relation to one another -- where to start?

@@ -61,6 +61,12 @@ class Lanelet():
 		self.centerline = centerline
 		self.regulatory_elements = regulatory_elements
 
+	def calculate_polygon():
+		left_bound_shapely_coords = list(left_bound.linestring.coords)
+		right_bound_shapely_coords = list(right_bound.linestring.coords)
+		polygon_coords = left_bound_shapely_coords + right_bound_shapely_coords.reverse()
+		return Polygon(polygon_coords)
+
 
 class Area():
 	''' Ordered list of linestrings representing undirected traffic 
@@ -104,12 +110,12 @@ class MapData:
 			shapely_point = Point(x, y)
 			self.points[id_] = L2_Point(id_, shapely_point)
 
-		def __extract_polygon(id_, polygon_tuples, type_, subtype):
-			shapely_polygon = Polygon(polygon_tuples)
+		def __extract_polygon(id_, polygon_coords, type_, subtype):
+			shapely_polygon = Polygon(polygon_coords)
 			self.polygons[id_] = L2_Polygon(id_, shapely_polygon, type_, subtype)
 
-		def __extract_linestring(id_, linestring_tuples, type_, subtype):
-			shapely_linestring = LineString(linestring_tuples)
+		def __extract_linestring(id_, linestring_coords, type_, subtype):
+			shapely_linestring = LineString(linestring_coords)
 			self.linestrings[id_] = L2_Linestring(id_, shapely_linestring, type_, subtype)
 
 		def __extract_lanelet(id_, subtype, region, location, one_way, pedestrian, bicycle, relation_element):
@@ -184,7 +190,7 @@ class MapData:
 			way_id = int(way.get('id'))
 			__ref_point_ids = [int(point.get('ref')) for point in way.findall('nd')]
 			__ref_points = [self.points[id_] for id_ in __ref_point_ids]
-			ref_point_tuples = [(L2_point.point.x, L2_point.point.y) for L2_point in __ref_points]
+			ref_point_coords = [(L2_point.point.x, L2_point.point.y) for L2_point in __ref_points]
 			
 			area_tag = False  # area='yes' tag indicates polygon
 			type_tag = None
@@ -203,9 +209,9 @@ class MapData:
 					print(f'Unhandled way tag with key={key}')
 
 			if area_tag:  # polygon
-				__extract_polygon(way_id, ref_point_tuples, type_tag, subtype_tag)
+				__extract_polygon(way_id, ref_point_coords, type_tag, subtype_tag)
 			else:  # linestring
-				__extract_linestring(way_id, ref_point_tuples, type_tag, subtype_tag)
+				__extract_linestring(way_id, ref_point_coords, type_tag, subtype_tag)
 
 		for relation in root.iter('relation'):
 			relation_id = int(relation.get('id'))
