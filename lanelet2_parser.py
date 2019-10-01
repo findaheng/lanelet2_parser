@@ -48,9 +48,14 @@ class Lanelet():
 	''' Atomic lane defined by exactly one left and one right linestrings
 	that represents directed traffic from entry to exit '''
 
-	# TODO: Add fields for type, subtype, location, region, one_way, etc.
-	def __init__(self, id_, left_bound=None, right_bound=None, centerline=None, regulatory_elements=[]):
+	def __init__(self, id_, subtype, region, location, one_way, pedestrian_participant, bicycle_participant, left_bound=None, right_bound=None, centerline=None, regulatory_elements=[]):
 		self.id_ = id_
+		self.subtype = subtype
+		self.region = region
+		self.location = location
+		self.one_way = one_way
+		self.pedestrian_participant = pedestrian_participant
+		self.bicycle_participant = bicycle_participant
 		self.left_bound = left_bound
 		self.right_bound = right_bound 
 		self.centerline = centerline
@@ -107,8 +112,8 @@ class MapData:
 			shapely_linestring = LineString(linestring_tuples)
 			self.linestrings[id_] = L2_Linestring(id_, shapely_linestring, type_, subtype)
 
-		def __extract_lanelet(id_, relation_element):
-			lanelet = Lanelet(id_)
+		def __extract_lanelet(id_, subtype, region, location, one_way, pedestrian, bicycle, relation_element):
+			lanelet = Lanelet(id_, subtype, region, location, one_way, pedestrian, bicycle)
 
 			for member in relation_element.iter('member'):
 				member_role = member.get('role')
@@ -195,8 +200,7 @@ class MapData:
 				elif key == 'subtype':
 					subtype_tag = value
 				else:
-					# TODO: Handle other tags (location, region, one_way, etc.)
-					continue
+					print(f'Unhandled relation tag with key={key}')
 
 			if area_tag:  # polygon
 				__extract_polygon(way_id, ref_point_tuples, type_tag, subtype_tag)
@@ -208,6 +212,11 @@ class MapData:
 
 			type_tag = None
 			subtype_tag = None
+			region_tag = None
+			location_tag = None
+			one_way_tag = False
+			pedestrian_tag = False
+			bicycle_tag = False
 			for tag in relation.iter('tag'):
 				key = tag.get('k')
 				value = tag.get('v')
@@ -216,12 +225,21 @@ class MapData:
 					type_tag = value
 				elif key == 'subtype':
 					subtype_tag = value
+				elif key == 'region':
+					region_tag = value
+				elif key == 'location':
+					location_tag = value
+				elif key == 'one_way':
+					one_way_tag = True if value == 'true' else False
+				elif key == 'participant:pedestrian':
+					pedestrian_tag = True if value == 'yes' else False
+				elif key == 'participant:bicycle':
+					bicycle_tag = True if value == 'yes' else False
 				else:
-					# TODO: Handle other tags (location, region, one_way, etc.)
-					continue
+					print(f'Unhandled relation tag with key={key}')
 
 			if type_tag == 'lanelet':
-				__extract_lanelet(relation_id, relation)
+				__extract_lanelet(relation_id, subtype_tag, region_tag, location_tag, one_way_tag, pedestrian_tag, bicycle_tag, relation)
 			elif type_tag == 'multipolygon':  # area
 				__extract_area(relation_id, relation)
 			elif type_tag == 'regulatory_element':
