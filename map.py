@@ -1,4 +1,5 @@
-import lanelet2_parser as parser
+import lanelet2_parser as parser  #NOTE: Must be in same directory as this file
+from shapely.geometry import Point, LineString, Polygon
 
 """ 
 	High-level representation of a map:
@@ -41,6 +42,12 @@ class MapRepresentation:
 	''' Uses map data extracted from an OSM-XML file to construct 
 	an higher level representation of the map layout '''
 
-	def __init__(self):
+	def __init__(self, path):
+		self.__map_data = parser.MapData()
+		__map_data.parse(path)
+
 		self.roads = {}
 		self.junctions = {}
+
+	def construct(self):
+
