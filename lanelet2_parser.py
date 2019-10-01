@@ -200,7 +200,7 @@ class MapData:
 				elif key == 'subtype':
 					subtype_tag = value
 				else:
-					print(f'Unhandled relation tag with key={key}')
+					print(f'Unhandled way tag with key={key}')
 
 			if area_tag:  # polygon
 				__extract_polygon(way_id, ref_point_tuples, type_tag, subtype_tag)
