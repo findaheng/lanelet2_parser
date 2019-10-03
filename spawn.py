@@ -20,10 +20,10 @@ def use_sample(sample):
 		state.transform.rotation.y = obj.heading * 180 / math.pi + 90  # calculation from Wilson's Carla simulator
 
 		if obj.type == 'Car':
-			name = 'Sedan'
+			name = 'Sedan'  # alt. names = ['Sedan', SUV', 'Jeep', 'Hatchback', 'SchoolBus', 'BoxTruck']
 			type_ = lgsvl.AgentType.NPC
 		elif obj.type == 'Pedestrian'
-			name = 'Bob'
+			name = 'Bob'  # alt. names = ['Bob', 'EntrepreneurFemale', 'Howard', 'Johny', 'Pamela', 'Presley', 'Red', 'Robin', 'Stephen', 'Zoe']
 			type_ = lgsvl.AgentType.PEDESTRIAN
 		else:
 			print(f'Unsupported agent with type={obj.type}')
@@ -39,9 +39,11 @@ def get_state():
 
 	print('Retrieving current state of all agents ...\n')
 
-	agents = lgsvl.get_agents()
+	agents = lgsvl.get_agents()  # method that returns a list of currently available agent objects added with add_agent
 
 	print(f'... Found {len(agents)} agents.')
 
 	for agent in agents:
-		print(f'name={agent.name}, type={'car' if agent.agent_type == lgsvl.AgentType.NPC else 'pedestrian'}, position={agent.state.position}, heading={agent.state.rotation.y}')  # NOTE: Unsure if agent.state.<orientation> is correct syntax
+		print(f'name={agent.name}, type={'car' if agent.agent_type == lgsvl.AgentType.NPC else 'pedestrian'}, position={agent.state.transform.position}, heading={agent.state.transform.rotation.y}')
+
+	return agents
