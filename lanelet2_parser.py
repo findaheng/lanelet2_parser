@@ -82,6 +82,24 @@ class Area():
 		self.outer_linestrings = outer_linestrings
 		self.inner_linestrings = inner_linestrings
 
+	def calculate_polygon(self):
+		outer_bound_coords = []
+		for l2_linestring in self.outer_linestrings:
+			shapely_linestring = l2_linestring.linestring
+			outer_bound_coords.extend(shapely_linestring.coords)
+
+		inner_bound_coords = []
+		for l2_linestring in self.inner_linestrings:
+			shapely_linestring = l2_linestring.linestring
+			inner_bound_coords.extend(shapely_linestring.coords)
+
+		# minimum 3 coordinates needed to define a polygon
+		if len(outer_bound_coords) < 3 or (inner_bound_coords and len(inner_bound_coords) < 3):
+			print(f'Area with id={self.id_} does not have at least 3 coordinate tuples')
+			return Polygon()
+
+		return Polygon(outer_bound_coords, inner_bound_coords)
+
 
 class RegulatoryElement():
 	''' Defines traffic rules, such as speed 
@@ -108,7 +126,10 @@ class MapData:
 		self.__todo_lanelets_regelems = []  # list of tuples in the form: (lanelet id, regulatory_element id)
 
 	def plot(self, c='r'):
+		''' Plot polygon representations of data fields on Matplotlib '''
+
 		def __plot_polygon(polygon):
+			''' Code from Wilson Wu's OpenDrive parser '''
 			if not polygon.exterior:
 				return
 			x, y = polygon.exterior.xy
@@ -122,6 +143,9 @@ class MapData:
 
 		for lanelet in self.lanelets.values():
 			__plot_polygon(lanelet.calculate_polygon())
+
+		for area in self.areas.values():
+			__plot_polygon(area.calculate_polygon())
 
 		plt.show()
 

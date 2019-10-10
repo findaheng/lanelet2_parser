@@ -69,5 +69,3 @@ class MapRepresentation:
 
 	def plot(self):
 		# NOTE: How to go about constructing an organized map from data with no indication of placement in relation to one another -- where to start?
-
-		for poly in __map_data.
