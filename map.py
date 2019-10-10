@@ -1,4 +1,5 @@
 import lanelet2_parser as parser  #NOTE: Must be in same directory as this file
+import matplotlib.pyplot as plt
 from shapely.geometry import Point, LineString, Polygon
 
 """ 
@@ -66,5 +67,7 @@ class MapRepresentation:
 		self.roads = {}
 		self.junctions = {}
 
-	def construct(self):
+	def plot(self):
 		# NOTE: How to go about constructing an organized map from data with no indication of placement in relation to one another -- where to start?
+
+		for poly in __map_data.

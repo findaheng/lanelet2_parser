@@ -1,4 +1,5 @@
 import xml.etree.ElementTree as ET
+import matplotlib.pyplot as plt
 from shapely.geometry import Point, LineString, Polygon
 
 """ 
@@ -48,7 +49,10 @@ class Lanelet():
 	''' Atomic lane defined by exactly one left and one right linestrings
 	that represents directed traffic from entry to exit '''
 
-	def __init__(self, id_, subtype, region, location, one_way, pedestrian_participant, bicycle_participant, left_bound=None, right_bound=None, centerline=None, regulatory_elements=[]):
+	def __init__(self, id_, subtype, 
+					region, location, one_way, 
+					vehicle_participant, pedestrian_participant, bicycle_participant, 
+					left_bound=None, right_bound=None, centerline=None, regulatory_elements=[]):
 		self.id_ = id_
 		self.subtype = subtype
 		self.region = region
@@ -61,11 +65,12 @@ class Lanelet():
 		self.centerline = centerline
 		self.regulatory_elements = regulatory_elements
 
-	def calculate_polygon():
-		left_bound_shapely_coords = list(left_bound.linestring.coords)
-		right_bound_shapely_coords = list(right_bound.linestring.coords)
-		polygon_coords = left_bound_shapely_coords + right_bound_shapely_coords.reverse()
-		return Polygon(polygon_coords)
+	def calculate_polygon(self):
+		left_bound_coords = list(self.left_bound.linestring.coords)
+		right_bound_coords = list(self.right_bound.linestring.coords)
+		right_bound_coords.reverse()
+		left_bound_coords.extend(right_bound_coords)
+		return Polygon(left_bound_coords)
 
 
 class Area():
@@ -82,7 +87,7 @@ class RegulatoryElement():
 	''' Defines traffic rules, such as speed 
 	limits, priority rules, or traffic lights '''
 
-	def __init__(self, id_, subtype):
+	def __init__(self, id_, subtype, fallback):
 		self.id_ = id_
 		self.subtype = subtype
 
@@ -102,6 +107,24 @@ class MapData:
 		# store id's of regulatory elements to add to a lanelet objects after parsing completes (such that the regulatory elements have been processed)
 		self.__todo_lanelets_regelems = []  # list of tuples in the form: (lanelet id, regulatory_element id)
 
+	def plot(self, c='r'):
+		def __plot_polygon(polygon):
+			if not polygon.exterior:
+				return
+			x, y = polygon.exterior.xy
+			plt.plot(x, y, c=c)
+			for interior in polygon.interiors:
+				x, y = interior.xy
+				plt.plot(x, y, c=c)
+
+		for poly in self.polygons.values():
+			__plot_polygon(poly.polygon)
+
+		for lanelet in self.lanelets.values():
+			__plot_polygon(lanelet.calculate_polygon())
+
+		plt.show()
+
 	def parse(self, path):
 
 		# MARK: - HELPER METHODS
@@ -118,8 +141,8 @@ class MapData:
 			shapely_linestring = LineString(linestring_coords)
 			self.linestrings[id_] = L2_Linestring(id_, shapely_linestring, type_, subtype)
 
-		def __extract_lanelet(id_, subtype, region, location, one_way, pedestrian, bicycle, relation_element):
-			lanelet = Lanelet(id_, subtype, region, location, one_way, pedestrian, bicycle)
+		def __extract_lanelet(id_, subtype, region, location, one_way, vehicle, pedestrian, bicycle, relation_element):
+			lanelet = Lanelet(id_, subtype, region, location, one_way, vehicle, pedestrian, bicycle)
 
 			for member in relation_element.iter('member'):
 				member_role = member.get('role')
@@ -160,8 +183,8 @@ class MapData:
 
 			self.areas[id_] = Area(id_, outer, inner)
 
-		def __extract_regulatory_element(id_, subtype):
-			self.regulatory_elements[id_] = RegulatoryElement(id_, subtype)
+		def __extract_regulatory_element(id_, subtype, fallback):
+			self.regulatory_elements[id_] = RegulatoryElement(id_, subtype, fallback)
 
 		def __execute_todo():
 			for lanelet_id, reg_elem_id in self.__todo_lanelets_regelems:
@@ -220,9 +243,11 @@ class MapData:
 			subtype_tag = None
 			region_tag = None
 			location_tag = None
-			one_way_tag = False
-			pedestrian_tag = False
-			bicycle_tag = False
+			one_way_tag = False  # for lanelets
+			vehicle_tag = False  # for lanelets
+			pedestrian_tag = False  # for lanelets
+			bicycle_tag = False  # for lanelets
+			fallback_tag = False  # for regulatory elements
 			for tag in relation.iter('tag'):
 				key = tag.get('k')
 				value = tag.get('v')
@@ -237,19 +262,23 @@ class MapData:
 					location_tag = value
 				elif key == 'one_way':
 					one_way_tag = True if value == 'true' else False
+				elif key == 'participant:vehicle':
+					vehicle_tag = True if value == 'true' else False
 				elif key == 'participant:pedestrian':
 					pedestrian_tag = True if value == 'yes' else False
 				elif key == 'participant:bicycle':
 					bicycle_tag = True if value == 'yes' else False
+				elif key == 'fallback':
+					fallback_tag = True if value == 'yes' else False
 				else:
 					print(f'Unhandled relation tag with key={key}')
 
 			if type_tag == 'lanelet':
-				__extract_lanelet(relation_id, subtype_tag, region_tag, location_tag, one_way_tag, pedestrian_tag, bicycle_tag, relation)
+				__extract_lanelet(relation_id, subtype_tag, region_tag, location_tag, one_way_tag, vehicle_tag, pedestrian_tag, bicycle_tag, relation)
 			elif type_tag == 'multipolygon':  # area
 				__extract_area(relation_id, relation)
 			elif type_tag == 'regulatory_element':
-				__extract_regulatory_element(relation_id, subtype_tag)
+				__extract_regulatory_element(relation_id, subtype_tag, fallback_tag)
 			else:
 				raise RuntimeError(f'Unknown relation type with id={relation_id}')
 

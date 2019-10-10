@@ -1,4 +1,5 @@
 import lanelet2_parser as parser
+import matplotlib.pyplot as plt
 
 """ 
 	Testing site:
@@ -24,3 +25,6 @@ if __name__ == '__main__':
 	print(f'Lanelets: {len(data.lanelets)}')
 	print(f'Regulatory elements: {len(data.regulatory_elements)}\n')
 	print('... Parsing Complete\n')
+
+	data.plot()
+	
