@@ -18,16 +18,18 @@ class L2_Point:
 	''' Point representation of Lanelet2 Point primitive type
 	using Shapely's Point class '''
 
-	def __init__(self, id_, point=None):
+	def __init__(self, id_, point, type_, subtype):
 		self.id_ = id_
 		self.point = point  # Shapely Point
+		self.type_ = type_
+		self.subtype = subtype
 
 
 class L2_Linestring:
 	''' Linestring representation of Lanelet2 Linestring primitive type
 	using Shapely's LineString class '''
 
-	def __init__(self, id_, linestring, type_, subtype=None):
+	def __init__(self, id_, linestring, type_, subtype):
 		self.id_ = id_
 		self.linestring = linestring  # Shapely LineString
 		self.type_ = type_ 
@@ -38,7 +40,7 @@ class L2_Polygon:
 	''' Polygon representation of Lanelet2 Polygon primitive type
 	using Shapely's Polygon class '''
 
-	def __init__(self, id_, polygon, type_, subtype=None):
+	def __init__(self, id_, polygon, type_, subtype):
 		self.id_ = id_
 		self.polygon = polygon  # Shapely Polygon
 		self.type_ = type_
@@ -50,7 +52,7 @@ class Lanelet():
 	that represents directed traffic from entry to exit '''
 
 	def __init__(self, id_, subtype, 
-					region, location, one_way, 
+					region, location, one_way, turn_direction,
 					vehicle_participant, pedestrian_participant, bicycle_participant, 
 					left_bound=None, right_bound=None, centerline=None, regulatory_elements=[]):
 		self.id_ = id_
@@ -58,6 +60,7 @@ class Lanelet():
 		self.region = region
 		self.location = location
 		self.one_way = one_way
+		self.turn_direction = turn_direction
 		self.pedestrian_participant = pedestrian_participant
 		self.bicycle_participant = bicycle_participant
 		self.left_bound = left_bound
@@ -153,9 +156,9 @@ class MapData:
 
 		# MARK: - HELPER METHODS
 
-		def __extract_point(id_, x, y):
-			shapely_point = Point(x, y)
-			self.points[id_] = L2_Point(id_, shapely_point)
+		def __extract_point(id_, x, y, z, type_, subtype):
+			shapely_point = Point(x, y, z) if z else Point(x, y)
+			self.points[id_] = L2_Point(id_, shapely_point, type_, subtype)
 
 		def __extract_polygon(id_, polygon_coords, type_, subtype):
 			shapely_polygon = Polygon(polygon_coords)
@@ -165,8 +168,8 @@ class MapData:
 			shapely_linestring = LineString(linestring_coords)
 			self.linestrings[id_] = L2_Linestring(id_, shapely_linestring, type_, subtype)
 
-		def __extract_lanelet(id_, subtype, region, location, one_way, vehicle, pedestrian, bicycle, relation_element):
-			lanelet = Lanelet(id_, subtype, region, location, one_way, vehicle, pedestrian, bicycle)
+		def __extract_lanelet(id_, subtype, region, location, one_way, turn_dir, vehicle, pedestrian, bicycle, relation_element):
+			lanelet = Lanelet(id_, subtype, region, location, one_way, turn_dir, vehicle, pedestrian, bicycle)
 
 			for member in relation_element.iter('member'):
 				member_role = member.get('role')
@@ -231,9 +234,28 @@ class MapData:
 			node_id = int(node.get('id'))
 			node_lat = float(node.get('lat'))
 			node_lon = float(node.get('lon'))
-			__extract_point(node_id, node_lat, node_lon)
+
+			type_tag = None
+			subtype_tag = None
+			ele_tag = None
+			for tag in node.iter('tag'):
+				key = tag.get('k')
+				value = tag.get('v')
+
+				if key == 'type':
+					type_tag = value
+				elif key == 'subtype':
+					subtype_tag = value
+				elif key == 'ele':
+					ele_tag = float(value)
+				else:
+					print(f'Unhandled node tag with key={key}')
+
+			__extract_point(node_id, node_lat, node_lon, ele_tag, type_tag, subtype_tag)
 
 		for way in root.iter('way'):
+			# TODO: Check if nodes defined in way, and if they're distinct from nodes defined in root
+			
 			way_id = int(way.get('id'))
 			__ref_point_ids = [int(point.get('ref')) for point in way.findall('nd')]
 			__ref_points = [self.points[id_] for id_ in __ref_point_ids]
@@ -267,6 +289,7 @@ class MapData:
 			subtype_tag = None
 			region_tag = None
 			location_tag = None
+			turn_direction_tag = None  # for lanelets
 			one_way_tag = False  # for lanelets
 			vehicle_tag = False  # for lanelets
 			pedestrian_tag = False  # for lanelets
@@ -284,6 +307,8 @@ class MapData:
 					region_tag = value
 				elif key == 'location':
 					location_tag = value
+				elif key == 'turn_direction':
+					turn_direction_tag = value
 				elif key == 'one_way':
 					one_way_tag = True if value == 'true' else False
 				elif key == 'participant:vehicle':
@@ -298,7 +323,7 @@ class MapData:
 					print(f'Unhandled relation tag with key={key}')
 
 			if type_tag == 'lanelet':
-				__extract_lanelet(relation_id, subtype_tag, region_tag, location_tag, one_way_tag, vehicle_tag, pedestrian_tag, bicycle_tag, relation)
+				__extract_lanelet(relation_id, subtype_tag, region_tag, location_tag, one_way_tag, turn_direction_tag, vehicle_tag, pedestrian_tag, bicycle_tag, relation)
 			elif type_tag == 'multipolygon':  # area
 				__extract_area(relation_id, relation)
 			elif type_tag == 'regulatory_element':
