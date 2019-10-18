@@ -1,5 +1,6 @@
 import xml.etree.ElementTree as ET
 import matplotlib.pyplot as plt
+import math
 from shapely.geometry import Point, LineString, Polygon
 
 """ 
@@ -71,7 +72,20 @@ class Lanelet():
 	def calculate_polygon(self):
 		left_bound_coords = list(self.left_bound.linestring.coords)
 		right_bound_coords = list(self.right_bound.linestring.coords)
-		right_bound_coords.reverse()
+
+		''' NOTE: Noticed that when always reversed the right bound, some of the
+		lanelet polygons were Z-shaped instead of rectangular.
+		Determined that there must not be a defined convention in the Lanelet2 format
+		for the order in which points were given.
+		Reversal will occur if bound "vectors" are not currently oriented head-to-tail,
+		which can be determined by comparing the distance of the left bound vector-head
+		to the head and tail of the right bound vector. '''
+		left_head = Point(left_bound_coords[-1])  # last point of the left bound 
+		right_tail = Point(right_bound_coords[0])  # first point of the right bound
+		right_head = Point(right_bound_coords[-1])  # first point of the right bound
+		if left_head.distance(right_head) < left_head.distance(right_tail):
+			right_bound_coords.reverse()
+
 		left_bound_coords.extend(right_bound_coords)
 		return Polygon(left_bound_coords)
 
