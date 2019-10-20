@@ -230,10 +230,12 @@ class MapData:
 
 	def heading_at(self, point):
 		point = Point(point.x, point.y) if not isinstance(point, Point) else point # convert to Shapely Point if necessary
-		# TODO
-		# find lanelet that contains point (if any)
-		# find first cell in lanelet that contains point (first because boundaries overlap)
-		pass
+		for lanelet in self.lanelets:
+			if lanelet.contains_point(point):
+				for cell in lanelet.cells:
+					if cell.contains_point(point):
+						return cell.heading
+				raise RuntimeError(f'Error finding point with coordinates x={point.x}, y={point.y} in cells of lanelet with id={lanelet.id_}')
 		raise RuntimeError(f'Heading not defined at point with coordinates x={point.x}, y={point.y}')
 
 	def plot(self, c='r'):
@@ -258,7 +260,7 @@ class MapData:
 			for cell in lanelet.cells:
 				__plot_polygon(cell.polygon)
 
-			#__plot_polygon(lanelet.polygon)
+			__plot_polygon(lanelet.polygon)
 
 		for area in self.areas.values():
 			__plot_polygon(area.polygon)
