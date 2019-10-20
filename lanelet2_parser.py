@@ -134,11 +134,14 @@ class Lanelet():
 			next_point = Point(more_pts_coords[i+1][0], more_pts_coords[i+1][1])  # to compute second bound and heading
 
 			# compute closes point (not necessarily a coordinate of) on other linestring
-			bound_pt_1 = less_pts_linestr.interpolate(less_pts_linestr.project(curr_point))
-			bound_pt_2 = less_pts_linestr.interpolate(less_pts_linestr.project(next_point)) 
+			bound_pt_1 = less_pts_linestr.interpolate(less_pts_linestr.project(next_point))
+			bound_pt_2 = less_pts_linestr.interpolate(less_pts_linestr.project(curr_point)) 
 
 			cell_polygon = Polygon([(p.x, p.y) for p in [curr_point, next_point, bound_pt_1, bound_pt_2]])
+
+			# FIXME: should not be able to define heading based on linestring, since linestring might be used for multiple lanes
 			cell_heading = math.atan((next_point.y - curr_point.y) / (next_point.x - curr_point.x)) + math.pi / 2  # since headings in radians clockwise from y-axis
+
 			cell = self.Cell(cell_polygon, cell_heading)
 			self.__cells.append(cell)
 		return self.__cells
@@ -224,7 +227,7 @@ class MapData:
 		if self.__drivable_polygon:
 			return self.__drivable_polygon
 
-		lanelet_polygons = [lanelet.polygon for lanelet in self.lanelets]
+		lanelet_polygons = [lanelet.polygon for lanelet in self.lanelets.values()]
 		self.__drivable_polygon = cascaded_union(lanelet_polygons)
 		return self.__drivable_polygon
 
@@ -254,13 +257,16 @@ class MapData:
 		for poly in self.polygons.values():
 			__plot_polygon(poly.polygon)
 
+		# NOTE: uncomment to see drivable region
+		#__plot_polygon(self.drivable_polygon)
+
 		for lanelet in self.lanelets.values():
 			
-			# TESTING
+			# NOTE: uncomment to see cells
 			for cell in lanelet.cells:
 				__plot_polygon(cell.polygon)
 
-			__plot_polygon(lanelet.polygon)
+			#__plot_polygon(lanelet.polygon)
 
 		for area in self.areas.values():
 			__plot_polygon(area.polygon)
