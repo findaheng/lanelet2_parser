@@ -262,11 +262,12 @@ class MapData:
 
 		for lanelet in self.lanelets.values():
 			
-			# NOTE: uncomment to see cells
 			for cell in lanelet.cells:
-				__plot_polygon(cell.polygon)
+				# NOTE: uncomment to see cells
+				#__plot_polygon(cell.polygon)
+				continue
 
-			#__plot_polygon(lanelet.polygon)
+			__plot_polygon(lanelet.polygon)
 
 		for area in self.areas.values():
 			__plot_polygon(area.polygon)
