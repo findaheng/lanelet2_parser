@@ -1,7 +1,7 @@
 import xml.etree.ElementTree as ET
 import matplotlib.pyplot as plt
 import math
-from shapely.geometry import Point, LineString, Polygon
+from shapely.geometry import Point, LineString, Polygon, MultiPolygon
 from shapely.ops import cascaded_union
 
 """ 
@@ -53,6 +53,7 @@ class Lanelet():
 	''' Atomic lane defined by exactly one left and one right linestrings
 	that represents directed traffic from entry to exit '''
 
+
 	class Cell():
 		''' Section of a lane, represented as a Shapely polygon, with a defined heading '''
 
@@ -63,6 +64,7 @@ class Lanelet():
 		def contains_point(self, point):
 			point = Point(point.x, point.y) if not isinstance(point, Point) else point  # convert to Shapely point if necessary
 			return polygon.contains(point)
+
 
 	def __init__(self, id_, subtype, 
 					region, location, one_way, turn_direction,
@@ -190,7 +192,7 @@ class Area():
 			self.__polygon = Polygon()
 		else:
 			self.__polygon = Polygon(outer_bound_coords, inner_bound_coords)
-			
+
 		return self.__polygon
 
 
@@ -229,7 +231,8 @@ class MapData:
 			return self.__drivable_polygon
 
 		lanelet_polygons = [lanelet.polygon for lanelet in self.lanelets.values()]
-		self.__drivable_polygon = cascaded_union(lanelet_polygons)
+		self.__drivable_polygon = cascaded_union(lanelet_polygons)  # returns either a Shapely Polygon or MultiPolygon
+
 		return self.__drivable_polygon
 
 	def heading_at(self, point):
@@ -245,7 +248,9 @@ class MapData:
 	def plot(self, c='r'):
 		''' Plot polygon representations of data fields on Matplotlib '''
 
-		def __plot_polygon(polygon):
+		# MARK : - HELPER METHODS
+
+		def __plot_polygon(polygon, c=c):
 			''' Code from Wilson Wu's OpenDrive parser '''
 			if not polygon.exterior:
 				return
@@ -255,20 +260,36 @@ class MapData:
 				x, y = interior.xy
 				plt.plot(x, y, c=c)
 
+		def __plot_multipolygon(multipolygon):
+			for i, polygon in enumerate(multipolygon):
+				__plot_polygon(polygon, c='b' if i % 2 else 'r')
+
+		def __plot_drivable_polygon():
+			# NOTE: checking type since cascaded union, which was used to compute drivable polygon, can return Polygon or MultiPolygon
+			if isinstance(self.drivable_polygon, MultiPolygon):
+				__plot_multipolygon(self.drivable_polygon)
+			elif isinstance(self.drivable_polygon, Polygon):
+				__plot_polygon(self.drivable_polygon)
+			else:
+				raise RuntimeError(f'Drivable polygon has unhandled type={type(self.drivable_polygon)}')
+
+		def __plot_lanelet_cells(lanelet):
+			for cell in lanelet.cells:
+				__plot_polygon(cell.polygon)
+
+		# MARK: - PLOTTING
+
 		for poly in self.polygons.values():
 			__plot_polygon(poly.polygon)
 
 		# NOTE: uncomment to see drivable region
-		#__plot_polygon(self.drivable_polygon)
+		#__plot_drivable_polygon()
 
 		for lanelet in self.lanelets.values():
-			
-			for cell in lanelet.cells:
-				# NOTE: uncomment to see cells
-				#__plot_polygon(cell.polygon)
-				continue
-
 			__plot_polygon(lanelet.polygon)
+			
+			# NOTE: uncomment to see lanelet cells
+			#__plot_lanelet_cells(lanelet)
 
 		for area in self.areas.values():
 			__plot_polygon(area.polygon)
@@ -276,6 +297,7 @@ class MapData:
 		plt.show()
 
 	def parse(self, path):
+		''' Parse OSM-XML file that fulfills the Lanelet2 framework '''
 
 		# MARK: - HELPER METHODS
 
