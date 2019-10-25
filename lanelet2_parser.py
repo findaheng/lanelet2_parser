@@ -188,8 +188,9 @@ class Area():
 		if len(outer_bound_coords) < 3 or (inner_bound_coords and len(inner_bound_coords) < 3):
 			print(f'Area with id={self.id_} does not have at least 3 coordinate tuples')
 			self.__polygon = Polygon()
-
-		self.__polygon = Polygon(outer_bound_coords, inner_bound_coords)
+		else:
+			self.__polygon = Polygon(outer_bound_coords, inner_bound_coords)
+			
 		return self.__polygon
 
 
