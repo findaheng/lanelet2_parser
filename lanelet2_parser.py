@@ -210,7 +210,6 @@ class MapData:
 	data types of the Lanelet2 framework'''
 
 	def __init__(self):
-
 		# low-level data
 		self.points = {}  # L2_Points
 		self.linestrings = {}  #L2_Linestrings
@@ -219,7 +218,7 @@ class MapData:
 		self.areas = {}
 		self.regulatory_elements = {}
 
-		# single Shapely Polygon of drivable region
+		# single Shapely Polygon or MultiPolygon of drivable region
 		self.__drivable_polygon = None  # store calculated polygon to avoid redundant calculations
 
 		# store id's of regulatory elements to add to a lanelet objects after parsing completes (such that the regulatory elements have been processed)
@@ -227,6 +226,14 @@ class MapData:
 
 	@property
 	def drivable_polygon(self):
+		''' Compute the Polygon or MultiPolygon that represents all drivable regions '''
+
+		def normalize():
+			''' Smooth out drivable polygon(s) by discarding outlier points '''
+
+			# TODO: for multipolygon case
+
+
 		if self.__drivable_polygon:
 			return self.__drivable_polygon
 
@@ -248,25 +255,29 @@ class MapData:
 	def plot(self, c='r'):
 		''' Plot polygon representations of data fields on Matplotlib '''
 
-		# MARK : - HELPER METHODS
+		# # # # # # # # # # # # # # 
+		# MARK : - HELPER METHODS #
+		# # # # # # # # # # # # # #
 
 		def __plot_polygon(polygon, c=c):
-			''' Code from Wilson Wu's OpenDrive parser '''
 			if not polygon.exterior:
 				return
-			x, y = polygon.exterior.xy
+
+			x, y = polygon.exterior.coords.xy
 			plt.plot(x, y, c=c)
+			
 			for interior in polygon.interiors:
-				x, y = interior.xy
+				x, y = interior.coords.xy
 				plt.plot(x, y, c=c)
 
 		def __plot_multipolygon(multipolygon):
 			for i, polygon in enumerate(multipolygon):
-				__plot_polygon(polygon, c='b' if i % 2 else 'r')
+				__plot_polygon(polygon, c=['r', 'b', 'g'][i % 3])  # to differentiate polygons by color
 
 		def __plot_drivable_polygon():
 			# NOTE: checking type since cascaded union, which was used to compute drivable polygon, can return Polygon or MultiPolygon
 			if isinstance(self.drivable_polygon, MultiPolygon):
+				print('Drivable region is a MultiPolygon')  # to notify user 
 				__plot_multipolygon(self.drivable_polygon)
 			elif isinstance(self.drivable_polygon, Polygon):
 				__plot_polygon(self.drivable_polygon)
@@ -277,19 +288,24 @@ class MapData:
 			for cell in lanelet.cells:
 				__plot_polygon(cell.polygon)
 
-		# MARK: - PLOTTING
+		# # # # # # # # # # # 
+		# MARK: - PLOTTING  #
+		# # # # # # # # # # # 
 
 		for poly in self.polygons.values():
 			__plot_polygon(poly.polygon)
 
 		# NOTE: uncomment to see drivable region
-		#__plot_drivable_polygon()
+		__plot_drivable_polygon()
 
 		for lanelet in self.lanelets.values():
-			__plot_polygon(lanelet.polygon)
+			# NOTE: comment to see drivable region
+			#__plot_polygon(lanelet.polygon)
 			
 			# NOTE: uncomment to see lanelet cells
 			#__plot_lanelet_cells(lanelet)
+
+			continue  # to avoid error if empty for-loop
 
 		for area in self.areas.values():
 			__plot_polygon(area.polygon)
@@ -299,7 +315,9 @@ class MapData:
 	def parse(self, path):
 		''' Parse OSM-XML file that fulfills the Lanelet2 framework '''
 
-		# MARK: - HELPER METHODS
+		# # # # # # # # # # # # # # 
+		# MARK : - HELPER METHODS #
+		# # # # # # # # # # # # # #
 
 		def __extract_point(id_, x, y, z, type_, subtype):
 			shapely_point = Point(x, y, z) if z else Point(x, y)
@@ -367,7 +385,9 @@ class MapData:
 				except:
 					raise RuntimeError(f'Unknown regulatory element with id={reg_elem_id} referenced in lanelet with id={lanelet_id}')
 
-		# MARK: - PARSING
+		# # # # # # # # # # #
+		# MARK : - PARSING  #
+		# # # # # # # # # # #
 
 		tree = ET.parse(path)
 		root = tree.getroot()
