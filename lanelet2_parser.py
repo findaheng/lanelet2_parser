@@ -432,8 +432,6 @@ class MapData:
 			__extract_point(node_id, node_lat, node_lon, ele_tag, type_tag, subtype_tag)
 
 		for way in root.iter('way'):
-			# TODO: Check if nodes defined in way, and if they're distinct from nodes defined in root
-			
 			way_id = int(way.get('id'))
 			__ref_point_ids = [int(point.get('ref')) for point in way.findall('nd')]
 			__ref_points = [self.points[id_] for id_ in __ref_point_ids]
