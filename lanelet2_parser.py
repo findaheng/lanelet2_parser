@@ -132,17 +132,17 @@ class Lanelet():
 		# NOTE: heading defined by slope of line segements of linestring with more points
 		more_pts_coords = more_pts_linestr.coords
 		for i in range(len(more_pts_coords) - 1):
-			curr_point = Point(more_pts_coords[i][0], more_pts_coords[i][1])  # convert to Shapely point
-			next_point = Point(more_pts_coords[i+1][0], more_pts_coords[i+1][1])  # to compute second bound and heading
+			curr_pt = Point(more_pts_coords[i][0], more_pts_coords[i][1])  # convert to Shapely point
+			next_pt = Point(more_pts_coords[i+1][0], more_pts_coords[i+1][1])  # to compute second bound and heading
 
 			# compute closes point (not necessarily a coordinate of) on other linestring
-			bound_pt_1 = less_pts_linestr.interpolate(less_pts_linestr.project(next_point))
-			bound_pt_2 = less_pts_linestr.interpolate(less_pts_linestr.project(curr_point)) 
+			bound_pt_1 = less_pts_linestr.interpolate(less_pts_linestr.project(next_pt))
+			bound_pt_2 = less_pts_linestr.interpolate(less_pts_linestr.project(curr_pt)) 
 
-			cell_polygon = Polygon([(p.x, p.y) for p in [curr_point, next_point, bound_pt_1, bound_pt_2]])
+			cell_polygon = Polygon([(p.x, p.y) for p in [curr_pt, next_pt, bound_pt_1, bound_pt_2]])
 
 			# FIXME: should not be able to define heading based on linestring, since linestring might be used for multiple lanes
-			cell_heading = math.atan((next_point.y - curr_point.y) / (next_point.x - curr_point.x)) + math.pi / 2  # since headings in radians clockwise from y-axis
+			cell_heading = math.atan((next_pt.y - curr_pt.y) / (next_pt.x - curr_pt.x)) + math.pi / 2  # since headings in radians clockwise from y-axis
 
 			cell = self.Cell(cell_polygon, cell_heading)
 			self.__cells.append(cell)
@@ -226,14 +226,6 @@ class MapData:
 
 	@property
 	def drivable_polygon(self):
-		''' Compute the Polygon or MultiPolygon that represents all drivable regions '''
-
-		def normalize():
-			''' Smooth out drivable polygon(s) by discarding outlier points '''
-
-			# TODO: for multipolygon case
-
-
 		if self.__drivable_polygon:
 			return self.__drivable_polygon
 
@@ -259,34 +251,55 @@ class MapData:
 		# MARK : - HELPER METHODS #
 		# # # # # # # # # # # # # #
 
-		def __plot_polygon(polygon, c=c):
+		def __plot_polygon(polygon, just_points=False, c=c):
+			if just_points:
+				__plot_polygon_points(polygon, c=c)
+				return
+
 			if not polygon.exterior:
 				return
 
 			x, y = polygon.exterior.coords.xy
 			plt.plot(x, y, c=c)
-			
+
 			for interior in polygon.interiors:
 				x, y = interior.coords.xy
 				plt.plot(x, y, c=c)
 
-		def __plot_multipolygon(multipolygon):
+		def __plot_multipolygon(multipolygon, just_points=False):
 			for i, polygon in enumerate(multipolygon):
-				__plot_polygon(polygon, c=['r', 'b', 'g'][i % 3])  # to differentiate polygons by color
+				__plot_polygon(polygon, just_points, c=['r', 'b', 'g', 'c', 'm', 'y', 'k'][i % 7])  # to differentiate polygons by color
 
-		def __plot_drivable_polygon():
+		def __plot_drivable_polygon(just_points=False):
 			# NOTE: checking type since cascaded union, which was used to compute drivable polygon, can return Polygon or MultiPolygon
 			if isinstance(self.drivable_polygon, MultiPolygon):
-				print('Drivable region is a MultiPolygon')  # to notify user 
-				__plot_multipolygon(self.drivable_polygon)
+				__plot_multipolygon(self.drivable_polygon, just_points)
 			elif isinstance(self.drivable_polygon, Polygon):
-				__plot_polygon(self.drivable_polygon)
+				__plot_polygon(self.drivable_polygon, just_points)
 			else:
 				raise RuntimeError(f'Drivable polygon has unhandled type={type(self.drivable_polygon)}')
 
-		def __plot_lanelet_cells(lanelet):
+		def __plot_lanelet_cells(lanelet, just_points=False):
 			for cell in lanelet.cells:
-				__plot_polygon(cell.polygon)
+				__plot_polygon(cell.polygon, just_points)
+
+		# NOTE: for testing purposes
+		def __plot_polygon_points(polygon, c=c):
+			''' Plots polygon's exterior points in red and interior points in blue '''
+
+			if not polygon.exterior:
+				return
+
+			x, y = polygon.exterior.coords.xy
+			coords_map = zip(x, y)
+			for coord in coords_map:
+				plt.plot(coord[0], coord[1], marker='x', c='r')
+
+			for interior in polygon.interiors:
+				x, y = interior.coords.xy
+				coords_map = zip(x, y)
+				for coord in coords_map:
+					plt.plot(coord[0], coord[1], marker='x', c='b')
 
 		# # # # # # # # # # # 
 		# MARK: - PLOTTING  #
@@ -299,7 +312,7 @@ class MapData:
 		__plot_drivable_polygon()
 
 		for lanelet in self.lanelets.values():
-			# NOTE: comment to see drivable region
+			# NOTE: comment when trying see only drivable region
 			#__plot_polygon(lanelet.polygon)
 			
 			# NOTE: uncomment to see lanelet cells
