@@ -234,9 +234,10 @@ class MapData:
 
 		return self.__drivable_polygon
 
+	# FIXME
 	def heading_at(self, point):
 		point = Point(point.x, point.y) if not isinstance(point, Point) else point # convert to Shapely Point if necessary
-		for lanelet in self.lanelets:
+		for lanelet in self.lanelets.values():
 			if lanelet.contains_point(point):
 				for cell in lanelet.cells:
 					if cell.contains_point(point):
@@ -309,11 +310,11 @@ class MapData:
 			__plot_polygon(poly.polygon)
 
 		# NOTE: uncomment to see drivable region
-		__plot_drivable_polygon()
+		#__plot_drivable_polygon()
 
 		for lanelet in self.lanelets.values():
 			# NOTE: comment when trying see only drivable region
-			#__plot_polygon(lanelet.polygon)
+			__plot_polygon(lanelet.polygon)
 			
 			# NOTE: uncomment to see lanelet cells
 			#__plot_lanelet_cells(lanelet)
