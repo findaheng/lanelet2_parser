@@ -138,7 +138,8 @@ class Lanelet():
 			cell_polygon = Polygon([(p.x, p.y) for p in [curr_pt, next_pt, bound_pt_1, bound_pt_2]])
 
 			# FIXME: (assuming) can define heading based on lanelet's right bound
-			cell_heading = math.atan((next_pt.y - curr_pt.y) / (next_pt.x - curr_pt.x)) + math.pi / 2  # since headings in radians clockwise from y-axis
+			delta_x = next_pt.x - curr_pt.x
+			cell_heading = math.atan((next_pt.y - curr_pt.y) / delta_x) + math.pi / 2 if delta_x else 0 # since headings in radians clockwise from y-axis
 
 			cell = self.Cell(cell_polygon, cell_heading)
 			self.__cells.append(cell)
@@ -233,6 +234,65 @@ class MapData:
 
 		return self.__cells
 
+	def __align_lanelets(self, percent_err=1):
+		''' Align lanelet bounds to overlap exactly '''
+
+		bounds = self.drivable_polygon.bounds  # (minx, miny, maxx, maxy)
+		greater_dim = max(bounds[2] - bounds[0], bounds[3] - bounds[1])
+		min_dist = greater_dim * percent_err / 100  # minimum distance two points before being combined
+		print(min_dist)
+
+		lanelets = [v for v in self.lanelets.values()]
+		for i in range(len(lanelets) - 1):
+			curr = lanelets[i]
+			curr_left = list(curr.left_bound.linestring.coords)
+			curr_right = list(curr.right_bound.linestring.coords)
+			curr_bound_pts = tuple(Point(coords) for coords in (curr_left[0], curr_left[-1], curr_right[0], curr_right[-1]))
+
+			for j in range(i + 1, len(lanelets)):
+				other = lanelets[j]
+				other_left = list(other.left_bound.linestring.coords)
+				other_right = list(other.right_bound.linestring.coords)
+				other_bound_pts = tuple(Point(coords) for coords in (other_left[0], other_left[-1], other_right[0], other_right[-1]))
+
+				for u in range(len(curr_bound_pts)):
+					curr_pt = curr_bound_pts[u]
+
+					for k in range(len(other_bound_pts)):
+						other_pt = other_bound_pts[k]
+						dist = curr_pt.distance(other_pt)
+
+						if dist != 0 and dist < min_dist:
+							avg_x = (curr_pt.x + other_pt.x) / 2
+							avg_y = (curr_pt.y + other_pt.y) / 2
+
+							if u == 0 or u == 1:  # replace left bound coordinates
+								new_coords = curr_left
+								new_coords[0 if u == 0 else -1] = (avg_x, avg_y)
+								curr.left_bound.linestring = LineString(new_coords)
+							elif u == 2 or u == 3:  # replace right bound coordinates
+								new_coords = curr_right
+								new_coords[0 if u == 2 else -1] = (avg_x, avg_y)
+								curr.right_bound.linestring = LineString(new_coords)
+
+							if k == 0 or k == 1:  # replace left bound coordinates
+								new_coords = other_left
+								new_coords[0 if k == 0 else -1] = (avg_x, avg_y)
+								other.left_bound.linestring = LineString(new_coords)
+							elif k == 2 or k == 3:  # replace right bound coordinates
+								new_coords = other_right
+								new_coords[0 if k == 2 else -1] = (avg_x, avg_y)
+								other.right_bound.linestring = LineString(new_coords)
+
+		for lanelet in self.lanelets.values():
+			# re-compute lanelet polygons
+			lanelet.__polygon = None
+			lanelet.__polygon = curr.polygon
+
+		# re-compute drivable polygon
+		self.__drivable_polygon = None
+		self.__drivable_polygon = self.drivable_polygon  
+							
 	def plot(self, c='r'):
 		''' Plot polygon representations of data fields on Matplotlib '''
 
@@ -298,11 +358,11 @@ class MapData:
 			__plot_polygon(poly.polygon)
 
 		# NOTE: uncomment to see drivable region
-		__plot_drivable_polygon()
+		#__plot_drivable_polygon()
 
 		for lanelet in self.lanelets.values():
 			# NOTE: comment when trying see only drivable region
-			#__plot_polygon(lanelet.polygon)
+			__plot_polygon(lanelet.polygon)
 			
 			# NOTE: uncomment to see lanelet cells
 			#__plot_lanelet_cells(lanelet)
@@ -416,7 +476,8 @@ class MapData:
 				elif key == 'ele':
 					ele_tag = float(value)
 				else:
-					print(f'Unhandled node tag with key={key}')
+					#print(f'Unhandled node tag with key={key}')
+					continue
 
 			__extract_point(node_id, node_lat, node_lon, ele_tag, type_tag, subtype_tag)
 
@@ -497,3 +558,5 @@ class MapData:
 				raise RuntimeError(f'Unknown relation type with id={relation_id}')
 
 		__execute_todo()  # add stored unparsed regulatory elements to corresponding lanelets
+
+		self.__align_lanelets()
