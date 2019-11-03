@@ -61,6 +61,10 @@ class Lanelet():
 			self.polygon = polygon  # Shapely polygon
 			self.heading = heading  # radians clockwise from y-axis
 
+		def contains_point(self, point):
+			point = Point(point.x, point.y) if not isinstance(point, Point) else point  # convert to Shapely point if necessary
+			return polygon.contains(point)
+
 
 	def __init__(self, id_, subtype, 
 					region, location, one_way, turn_direction,
@@ -79,7 +83,7 @@ class Lanelet():
 		self.centerline = centerline  # L2_Linestring
 		self.regulatory_elements = regulatory_elements
 
-		# calculated fields for property methods
+		# calculated fields to store property methods
 		self.__polygon = None
 		self.__cells = []
 
@@ -137,13 +141,23 @@ class Lanelet():
 
 			cell_polygon = Polygon([(p.x, p.y) for p in [curr_pt, next_pt, bound_pt_1, bound_pt_2]])
 
-			# FIXME: (assuming) can define heading based on lanelet's right bound
+			# FIXME: should not be able to define heading based on linestring, since linestring might be used for multiple lanes
 			cell_heading = math.atan((next_pt.y - curr_pt.y) / (next_pt.x - curr_pt.x)) + math.pi / 2  # since headings in radians clockwise from y-axis
 
 			cell = self.Cell(cell_polygon, cell_heading)
 			self.__cells.append(cell)
-
 		return self.__cells
+
+	def contains_point(self, point):
+		point = Point(point.x, point.y) if not isinstance(point, Point) else point  # convert to Shapely point if necessary
+		return self.polygon.contains(point)
+
+	def heading_at(self, point):
+		point = Point(point.x, point.y) if not isinstance(point, Point) else point  # convert to Shapely point if necessary
+		cells_with_point = [cell for cell in self.cells if cell.contains_point(point)]
+		cell = cells_with_point[0] if cells_with_point else None
+		assert cell, f'Point with coordinates x={point.x}, y={point.y} not in lanelet with id={self.id_}'
+		return cell.heading  # radians clockwise from y-axis
 
 
 class Area():
@@ -204,9 +218,8 @@ class MapData:
 		self.areas = {}
 		self.regulatory_elements = {}
 
-		# calculate fields for property methods
-		self.__drivable_polygon = None  # for interface's drivable polygonal region 
-		self.__cells = []    # for interface's polygonal vector field
+		# single Shapely Polygon or MultiPolygon of drivable region
+		self.__drivable_polygon = None  # store calculated polygon to avoid redundant calculations
 
 		# store id's of regulatory elements to add to a lanelet objects after parsing completes (such that the regulatory elements have been processed)
 		self.__todo_lanelets_regelems = []  # list of tuples in the form: (lanelet id, regulatory_element id)
@@ -221,17 +234,16 @@ class MapData:
 
 		return self.__drivable_polygon
 
-	@property
-	def cells(self):
-		if self.__cells:
-			return self.__cells
-
+	# FIXME
+	def heading_at(self, point):
+		point = Point(point.x, point.y) if not isinstance(point, Point) else point # convert to Shapely Point if necessary
 		for lanelet in self.lanelets.values():
-			for cell in lanelet.cells:
-				cell_heading = (cell.polygon, cell.heading)  # polygonal vector field takes a list of (polygon, heading) tuples
-				self.__cells.append(cell_heading)
-
-		return self.__cells
+			if lanelet.contains_point(point):
+				for cell in lanelet.cells:
+					if cell.contains_point(point):
+						return cell.heading
+				raise RuntimeError(f'Error finding point with coordinates x={point.x}, y={point.y} in cells of lanelet with id={lanelet.id_}')
+		raise RuntimeError(f'Heading not defined at point with coordinates x={point.x}, y={point.y}')
 
 	def plot(self, c='r'):
 		''' Plot polygon representations of data fields on Matplotlib '''
@@ -322,7 +334,7 @@ class MapData:
 		# # # # # # # # # # # # # #
 
 		def __extract_point(id_, x, y, z, type_, subtype):
-			shapely_point = Point(x, y, z) if z else Point(x, y)
+			shapely_point = Point(x * 10000, y * 1000, z * 1000) if z else Point(x * 1000, y * 1000)
 			self.points[id_] = L2_Point(id_, shapely_point, type_, subtype)
 
 		def __extract_polygon(id_, polygon_coords, type_, subtype):
