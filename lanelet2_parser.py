@@ -217,7 +217,7 @@ class MapData:
 		if self.__drivable_polygon:
 			return self.__drivable_polygon
 
-		lanelet_polygons = [lanelet.polygon for lanelet in self.lanelets.values()]
+		lanelet_polygons = [lanelet.polygon for lanelet in self.lanelets.values() if lanelet.subtype != 'crosswalk']
 		self.__drivable_polygon = cascaded_union(lanelet_polygons)  # returns either a Shapely Polygon or MultiPolygon
 
 		return self.__drivable_polygon
@@ -232,66 +232,7 @@ class MapData:
 				cell_heading = (cell.polygon, cell.heading)  # polygonal vector field takes a list of (polygon, heading) tuples
 				self.__cells.append(cell_heading)
 
-		return self.__cells
-
-	def __align_lanelets(self, percent_err=1):
-		''' Align lanelet bounds to overlap exactly '''
-
-		bounds = self.drivable_polygon.bounds  # (minx, miny, maxx, maxy)
-		greater_dim = max(bounds[2] - bounds[0], bounds[3] - bounds[1])
-		min_dist = greater_dim * percent_err / 100  # minimum distance two points before being combined
-		print(min_dist)
-
-		lanelets = [v for v in self.lanelets.values()]
-		for i in range(len(lanelets) - 1):
-			curr = lanelets[i]
-			curr_left = list(curr.left_bound.linestring.coords)
-			curr_right = list(curr.right_bound.linestring.coords)
-			curr_bound_pts = tuple(Point(coords) for coords in (curr_left[0], curr_left[-1], curr_right[0], curr_right[-1]))
-
-			for j in range(i + 1, len(lanelets)):
-				other = lanelets[j]
-				other_left = list(other.left_bound.linestring.coords)
-				other_right = list(other.right_bound.linestring.coords)
-				other_bound_pts = tuple(Point(coords) for coords in (other_left[0], other_left[-1], other_right[0], other_right[-1]))
-
-				for u in range(len(curr_bound_pts)):
-					curr_pt = curr_bound_pts[u]
-
-					for k in range(len(other_bound_pts)):
-						other_pt = other_bound_pts[k]
-						dist = curr_pt.distance(other_pt)
-
-						if dist != 0 and dist < min_dist:
-							avg_x = (curr_pt.x + other_pt.x) / 2
-							avg_y = (curr_pt.y + other_pt.y) / 2
-
-							if u == 0 or u == 1:  # replace left bound coordinates
-								new_coords = curr_left
-								new_coords[0 if u == 0 else -1] = (avg_x, avg_y)
-								curr.left_bound.linestring = LineString(new_coords)
-							elif u == 2 or u == 3:  # replace right bound coordinates
-								new_coords = curr_right
-								new_coords[0 if u == 2 else -1] = (avg_x, avg_y)
-								curr.right_bound.linestring = LineString(new_coords)
-
-							if k == 0 or k == 1:  # replace left bound coordinates
-								new_coords = other_left
-								new_coords[0 if k == 0 else -1] = (avg_x, avg_y)
-								other.left_bound.linestring = LineString(new_coords)
-							elif k == 2 or k == 3:  # replace right bound coordinates
-								new_coords = other_right
-								new_coords[0 if k == 2 else -1] = (avg_x, avg_y)
-								other.right_bound.linestring = LineString(new_coords)
-
-		for lanelet in self.lanelets.values():
-			# re-compute lanelet polygons
-			lanelet.__polygon = None
-			lanelet.__polygon = curr.polygon
-
-		# re-compute drivable polygon
-		self.__drivable_polygon = None
-		self.__drivable_polygon = self.drivable_polygon  
+		return self.__cells 
 							
 	def plot(self, c='r'):
 		''' Plot polygon representations of data fields on Matplotlib '''
@@ -447,6 +388,64 @@ class MapData:
 				except:
 					raise RuntimeError(f'Unknown regulatory element with id={reg_elem_id} referenced in lanelet with id={lanelet_id}')
 
+		def __align_lanelets(percent_err=1):
+			''' Align lanelet bounds to overlap exactly '''
+
+			bounds = self.drivable_polygon.bounds  # (minx, miny, maxx, maxy)
+			greater_dim = max(bounds[2] - bounds[0], bounds[3] - bounds[1])
+			min_dist = greater_dim * percent_err / 100  # minimum distance two points before being combined
+
+			lanelets = [v for v in self.lanelets.values()]
+			for i in range(len(lanelets) - 1):
+				curr = lanelets[i]
+				curr_left = list(curr.left_bound.linestring.coords)
+				curr_right = list(curr.right_bound.linestring.coords)
+				curr_bound_pts = tuple(Point(coords) for coords in (curr_left[0], curr_left[-1], curr_right[0], curr_right[-1]))
+
+				for j in range(i + 1, len(lanelets)):
+					other = lanelets[j]
+					other_left = list(other.left_bound.linestring.coords)
+					other_right = list(other.right_bound.linestring.coords)
+					other_bound_pts = tuple(Point(coords) for coords in (other_left[0], other_left[-1], other_right[0], other_right[-1]))
+
+					for u in range(len(curr_bound_pts)):
+						curr_pt = curr_bound_pts[u]
+
+						for k in range(len(other_bound_pts)):
+							other_pt = other_bound_pts[k]
+							dist = curr_pt.distance(other_pt)
+
+							if dist != 0 and dist < min_dist:
+								avg_x = (curr_pt.x + other_pt.x) / 2
+								avg_y = (curr_pt.y + other_pt.y) / 2
+
+								if u == 0 or u == 1:  # replace left bound coordinates
+									new_coords = curr_left
+									new_coords[0 if u == 0 else -1] = (avg_x, avg_y)
+									curr.left_bound.linestring = LineString(new_coords)
+								else:  # replace right bound coordinates
+									new_coords = curr_right
+									new_coords[0 if u == 2 else -1] = (avg_x, avg_y)
+									curr.right_bound.linestring = LineString(new_coords)
+
+								if k == 0 or k == 1:  # replace left bound coordinates
+									new_coords = other_left
+									new_coords[0 if k == 0 else -1] = (avg_x, avg_y)
+									other.left_bound.linestring = LineString(new_coords)
+								else:  # replace right bound coordinates
+									new_coords = other_right
+									new_coords[0 if k == 2 else -1] = (avg_x, avg_y)
+									other.right_bound.linestring = LineString(new_coords)
+
+			for lanelet in self.lanelets.values():
+				# re-compute lanelet polygons
+				lanelet.__polygon = None
+				lanelet.__polygon = curr.polygon
+
+			# re-compute drivable polygon
+			self.__drivable_polygon = None
+			self.__drivable_polygon = self.drivable_polygon 
+
 		# # # # # # # # # # #
 		# MARK : - PARSING  #
 		# # # # # # # # # # #
@@ -558,5 +557,4 @@ class MapData:
 				raise RuntimeError(f'Unknown relation type with id={relation_id}')
 
 		__execute_todo()  # add stored unparsed regulatory elements to corresponding lanelets
-
-		self.__align_lanelets()
+		__align_lanelets()  # ensure lanelet endpoints overlap exactly
