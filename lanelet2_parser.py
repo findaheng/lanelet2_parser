@@ -80,13 +80,13 @@ class Lanelet():
 		self.regulatory_elements = regulatory_elements
 
 		# calculated fields for property methods
-		self.__polygon = None
-		self.__cells = []
+		self._polygon = None
+		self._cells = []
 
 	@property
 	def polygon(self):
-		if self.__polygon:
-			return self.__polygon
+		if self._polygon:
+			return self._polygon
 
 		left_bound_coords = list(self.left_bound.linestring.coords)
 		right_bound_coords = list(self.right_bound.linestring.coords)
@@ -106,13 +106,14 @@ class Lanelet():
 			right_bound_coords.reverse()
 
 		left_bound_coords.extend(right_bound_coords)
-		self.__polygon = Polygon(left_bound_coords)
-		return self.__polygon
+		self._polygon = Polygon(left_bound_coords)
+
+		return self._polygon
 
 	@property
 	def cells(self):
-		if self.__cells:
-			return self.__cells
+		if self._cells:
+			return self._cells
 
 		# determine linestring with more points		
 		num_right_pts = len(self.right_bound.linestring.coords)  # number of points in right bound linestring
@@ -142,9 +143,9 @@ class Lanelet():
 			cell_heading = math.atan((next_pt.y - curr_pt.y) / delta_x) + math.pi / 2 if delta_x else 0 # since headings in radians clockwise from y-axis
 
 			cell = self.Cell(cell_polygon, cell_heading)
-			self.__cells.append(cell)
+			self._cells.append(cell)
 
-		return self.__cells
+		return self._cells
 
 
 class Area():
@@ -156,12 +157,12 @@ class Area():
 		self.outer_linestrings = outer_linestrings
 		self.inner_linestrings = inner_linestrings
 
-		self.__polygon = None  # store calculated polygon to avoid redundant calculations
+		self._polygon = None  # store calculated polygon to avoid redundant calculations
 
 	@property
 	def polygon(self):
-		if self.__polygon:
-			return self.__polygon
+		if self._polygon:
+			return self._polygon
 
 		outer_bound_coords = []
 		for l2_linestring in self.outer_linestrings:
@@ -176,11 +177,11 @@ class Area():
 		# minimum 3 coordinates needed to define a polygon
 		if len(outer_bound_coords) < 3 or (inner_bound_coords and len(inner_bound_coords) < 3):
 			print(f'Area with id={self.id_} does not have at least 3 coordinate tuples')
-			self.__polygon = Polygon()
+			self._polygon = Polygon()
 		else:
-			self.__polygon = Polygon(outer_bound_coords, inner_bound_coords)
+			self._polygon = Polygon(outer_bound_coords, inner_bound_coords)
 
-		return self.__polygon
+		return self._polygon
 
 
 class RegulatoryElement():
@@ -206,33 +207,33 @@ class MapData:
 		self.regulatory_elements = {}
 
 		# calculate fields for property methods
-		self.__drivable_polygon = None  # for interface's drivable polygonal region 
-		self.__cells = []    # for interface's polygonal vector field
+		self._drivable_polygon = None  # for interface's drivable polygonal region 
+		self._cells = []    # for interface's polygonal vector field
 
 		# store id's of regulatory elements to add to a lanelet objects after parsing completes (such that the regulatory elements have been processed)
-		self.__todo_lanelets_regelems = []  # list of tuples in the form: (lanelet id, regulatory_element id)
+		self._todo_lanelets_regelems = []  # list of tuples in the form: (lanelet id, regulatory_element id)
 
 	@property
 	def drivable_polygon(self):
-		if self.__drivable_polygon:
-			return self.__drivable_polygon
+		if self._drivable_polygon:
+			return self._drivable_polygon
 
 		lanelet_polygons = [lanelet.polygon for lanelet in self.lanelets.values() if lanelet.subtype != 'crosswalk']
-		self.__drivable_polygon = cascaded_union(lanelet_polygons)  # returns either a Shapely Polygon or MultiPolygon
+		self._drivable_polygon = cascaded_union(lanelet_polygons)  # returns either a Shapely Polygon or MultiPolygon
 
-		return self.__drivable_polygon
+		return self._drivable_polygon
 
 	@property
 	def cells(self):
-		if self.__cells:
-			return self.__cells
+		if self._cells:
+			return self._cells
 
 		for lanelet in self.lanelets.values():
 			for cell in lanelet.cells:
 				cell_heading = (cell.polygon, cell.heading)  # polygonal vector field takes a list of (polygon, heading) tuples
-				self.__cells.append(cell_heading)
+				self._cells.append(cell_heading)
 
-		return self.__cells 
+		return self._cells 
 							
 	def plot(self, c='r'):
 		''' Plot polygon representations of data fields on Matplotlib '''
@@ -352,13 +353,14 @@ class MapData:
 						reg_elem = self.regulatory_elements[ref_id]
 						lanelet.regulatory_elements.append(reg_elem)
 					except:
-					 	self.__todo_lanelets_regelems.append((id_, ref_id))  # regulatory element not yet parsed -> add after parsing complete
+					 	self._todo_lanelets_regelems.append((id_, ref_id))  # regulatory element not yet parsed -> add after parsing complete
 				else:
 					raise RuntimeError(f'Unknown member role in lanelet with id={id_}')
 
 			assert lanelet.left_bound and lanelet.right_bound, f'Lanelet with id={id_} missing bound(s)'  
 			self.lanelets[id_] = lanelet
 
+		# FIXME: calculation creates self-intersection error with Shapely polygons for lanelets
 		def __extract_area(id_, relation_element):
 			for member in relation_element.iter('member'):
 				member_role = member.get('role')
@@ -380,7 +382,7 @@ class MapData:
 			self.regulatory_elements[id_] = RegulatoryElement(id_, subtype, fallback)
 
 		def __execute_todo():
-			for lanelet_id, reg_elem_id in self.__todo_lanelets_regelems:
+			for lanelet_id, reg_elem_id in self._todo_lanelets_regelems:
 				try:
 					lanelet = self.lanelets[lanelet_id]
 					reg_elem = self.regulatory_elements[reg_elem_id]
@@ -437,14 +439,12 @@ class MapData:
 									new_coords[0 if k == 2 else -1] = (avg_x, avg_y)
 									other.right_bound.linestring = LineString(new_coords)
 
+			# re-compute polygons
 			for lanelet in self.lanelets.values():
-				# re-compute lanelet polygons
-				lanelet.__polygon = None
-				lanelet.__polygon = curr.polygon
-
-			# re-compute drivable polygon
-			self.__drivable_polygon = None
-			self.__drivable_polygon = self.drivable_polygon 
+				lanelet._polygon = None
+				assert lanelet.polygon
+			self._drivable_polygon = None
+			assert self.drivable_polygon
 
 		# # # # # # # # # # #
 		# MARK : - PARSING  #
