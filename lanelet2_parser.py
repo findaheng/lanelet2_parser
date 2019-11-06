@@ -106,7 +106,7 @@ class Lanelet():
 			right_bound_coords.reverse()
 
 		left_bound_coords.extend(right_bound_coords)
-		self._polygon = Polygon(left_bound_coords)
+		self._polygon = Polygon(left_bound_coords)#.buffer(1e-6)  # NOTE: Buffer to account for misaligned lanelets
 
 		return self._polygon
 
@@ -214,11 +214,12 @@ class MapData:
 		self._todo_lanelets_regelems = []  # list of tuples in the form: (lanelet id, regulatory_element id)
 
 	@property
-	def drivable_polygon(self):
+	def drivable_polygon(self, buffer_=1e-6):
 		if self._drivable_polygon:
 			return self._drivable_polygon
 
-		lanelet_polygons = [lanelet.polygon for lanelet in self.lanelets.values() if lanelet.subtype != 'crosswalk']
+		# NOTE: Buffer to account for misaligned lanelets
+		lanelet_polygons = [lanelet.polygon.buffer(buffer_) for lanelet in self.lanelets.values() if lanelet.subtype != 'crosswalk']
 		self._drivable_polygon = cascaded_union(lanelet_polygons)  # returns either a Shapely Polygon or MultiPolygon
 
 		return self._drivable_polygon
@@ -300,11 +301,11 @@ class MapData:
 			__plot_polygon(poly.polygon)
 
 		# NOTE: uncomment to see drivable region
-		#__plot_drivable_polygon()
+		__plot_drivable_polygon()
 
 		for lanelet in self.lanelets.values():
 			# NOTE: comment when trying see only drivable region
-			__plot_polygon(lanelet.polygon)
+			#__plot_polygon(lanelet.polygon)
 			
 			# NOTE: uncomment to see lanelet cells
 			#__plot_lanelet_cells(lanelet)
@@ -441,7 +442,7 @@ class MapData:
 
 			# re-compute polygons
 			for lanelet in self.lanelets.values():
-				lanelet._polygon = None
+				#lanelet._polygon = None  # FIXME
 				assert lanelet.polygon
 			self._drivable_polygon = None
 			assert self.drivable_polygon
