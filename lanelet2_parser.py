@@ -301,11 +301,11 @@ class MapData:
 			__plot_polygon(poly.polygon)
 
 		# NOTE: uncomment to see drivable region
-		__plot_drivable_polygon()
+		#__plot_drivable_polygon()
 
 		for lanelet in self.lanelets.values():
 			# NOTE: comment when trying see only drivable region
-			#__plot_polygon(lanelet.polygon)
+			__plot_polygon(lanelet.polygon)
 			
 			# NOTE: uncomment to see lanelet cells
 			#__plot_lanelet_cells(lanelet)
@@ -361,7 +361,6 @@ class MapData:
 			assert lanelet.left_bound and lanelet.right_bound, f'Lanelet with id={id_} missing bound(s)'  
 			self.lanelets[id_] = lanelet
 
-		# FIXME: calculation creates self-intersection error with Shapely polygons for lanelets
 		def __extract_area(id_, relation_element):
 			for member in relation_element.iter('member'):
 				member_role = member.get('role')
@@ -442,7 +441,7 @@ class MapData:
 
 			# re-compute polygons
 			for lanelet in self.lanelets.values():
-				#lanelet._polygon = None  # FIXME
+				#lanelet._polygon = None  # FIXME: calculation creates self-intersection error with Shapely polygons for lanelets
 				assert lanelet.polygon
 			self._drivable_polygon = None
 			assert self.drivable_polygon
