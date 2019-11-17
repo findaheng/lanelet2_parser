@@ -336,12 +336,16 @@ class MapData:
 
 			if x and y:
 				shapely_metric_point = Point(x, y, z) if z else Point(x, y)
-			elif is_origin is None:
+			elif not self._origin:
 				self._origin = (lon, lat)
 				shapely_metric_point = Point(0, 0, 0) if z else Point(0, 0)
 			else:
-				# TODO
-				pass
+				# NOTE: lon/lat -> meters calculation from https://stackoverflow.com/questions/3024404/transform-longitude-latitude-into-meters
+				deltaLon = lon - self._origin[0]
+				deltaLat = lat - self._origin[1]
+				x = deltaLon * 40075160 * math.cos(self._origin[1] * math.pi / 180) / 360
+				y = deltaLat * 40008000 / 360
+				shapely_metric_point = Point(x, y, z) if z else Point(x, y)
 
 			self.points[id_] = L2_Point(id_, shapely_metric_point, Point(lon, lat), type_, subtype)
 

@@ -4,7 +4,8 @@ import matplotlib.pyplot as plt
 """ 
 	Testing site:
 	
-	Runs results of Lanelet2 Parser and Map Representation.
+	Runs results of Lanelet2 Parser on 
+	example map provided in Lanelet2 repo.
 	-----
 	@author Francis Indaheng
 	
