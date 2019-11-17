@@ -4,9 +4,6 @@ import math
 from shapely.geometry import Point, LineString, Polygon, MultiPolygon
 from shapely.ops import cascaded_union
 
-# TODO: handle x, y in addition to lat, lon, use first point as origin if needed go to METERS, override origin with param
-# TODO: look into time of day, weather on LGSVL
-
 """ 
 	Lanelet2 parser for LGSVL Simulator:
 
@@ -26,7 +23,7 @@ class L2_Point:
 	def __init__(self, id_, metric_point, geo_point, type_, subtype):
 		self.id_ = id_
 		self.point = metric_point  # (Shapely Point) in meters
-		self.geo_point = geo_point  # (Shapely Point) store latitude and longitude data
+		self.geo_point = geo_point  # (Shapely Point) store x=longitude, y=latitude data
 		self.type_ = type_
 		self.subtype = subtype
 
@@ -225,7 +222,7 @@ class MapData:
 		if self._drivable_polygon:
 			return self._drivable_polygon
 
-		# NOTE: Buffer to account for misaligned lanelets
+		# NOTE: buffer to account for misaligned lanelets
 		lanelet_polygons = [lanelet.polygon.buffer(buffer_) for lanelet in self.lanelets.values() if lanelet.subtype != 'crosswalk']
 		self._drivable_polygon = cascaded_union(lanelet_polygons)  # returns either a Shapely Polygon or MultiPolygon
 
@@ -241,8 +238,8 @@ class MapData:
 				cell_heading = (cell.polygon, cell.heading)  # polygonal vector field takes a list of (polygon, heading) tuples
 				self._cells.append(cell_heading)
 
-		return self._cells 
-							
+		return self._cells
+				
 	def plot(self, c='r'):
 		''' Plot polygon representations of data fields on Matplotlib '''
 
@@ -340,14 +337,15 @@ class MapData:
 				self._origin = (lon, lat)
 				shapely_metric_point = Point(0, 0, 0) if z else Point(0, 0)
 			else:
-				# NOTE: lon/lat -> meters calculation from https://stackoverflow.com/questions/3024404/transform-longitude-latitude-into-meters
+				# NOTE: lon/lat to meters calculation from https://stackoverflow.com/questions/3024404/transform-longitude-latitude-into-meters
 				deltaLon = lon - self._origin[0]
 				deltaLat = lat - self._origin[1]
 				x = deltaLon * 40075160 * math.cos(self._origin[1] * math.pi / 180) / 360
 				y = deltaLat * 40008000 / 360
 				shapely_metric_point = Point(x, y, z) if z else Point(x, y)
 
-			self.points[id_] = L2_Point(id_, shapely_metric_point, Point(lon, lat), type_, subtype)
+			shapely_geo_point = Point(lon, lat)
+			self.points[id_] = L2_Point(id_, shapely_metric_point, shapely_geo_point, type_, subtype)
 
 		def __extract_polygon(id_, polygon_coords, type_, subtype):
 			shapely_polygon = Polygon(polygon_coords)
