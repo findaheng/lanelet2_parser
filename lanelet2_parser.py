@@ -218,7 +218,7 @@ class MapData:
 		self._todo_lanelets_regelems = []  # list of tuples in the form: (lanelet id, regulatory_element id)
 
 	@property
-	def drivable_polygon(self, buffer_=1e-6):
+	def drivable_polygon(self, buffer_=0.1):  # buffer_=1e-6 if in latitude/longitude
 		if self._drivable_polygon:
 			return self._drivable_polygon
 
@@ -305,11 +305,11 @@ class MapData:
 			__plot_polygon(poly.polygon)
 
 		# NOTE: uncomment to see drivable region
-		#__plot_drivable_polygon()
+		__plot_drivable_polygon()
 
 		for lanelet in self.lanelets.values():
 			# NOTE: comment when trying see only drivable region
-			__plot_polygon(lanelet.polygon)
+			#__plot_polygon(lanelet.polygon)
 			
 			# NOTE: uncomment to see lanelet cells
 			#__plot_lanelet_cells(lanelet)
