@@ -38,6 +38,13 @@ class L2_Linestring:
 		self.type_ = type_ 
 		self.subtype = subtype
 
+		# list of lanelet id's that reference this linestring as a bound
+		self._lanelet_references = []
+
+	def _add_reference(lanelet_id):
+		assert isinstance(lanelet_id, int) or isinstance(lanelet_id, float)
+		self._lanelet_references.append(lanelet_id)
+
 
 class L2_Polygon:
 	''' Polygon representation of Lanelet2 Polygon primitive type
@@ -593,7 +600,7 @@ class MapData:
 			region_tag = None
 			location_tag = None
 			turn_direction_tag = None  # for lanelets
-			one_way_tag = False  # for lanelets
+			one_way_tag = True  # one directional by default
 			vehicle_tag = False  # for lanelets
 			pedestrian_tag = False  # for lanelets
 			bicycle_tag = False  # for lanelets
@@ -613,9 +620,9 @@ class MapData:
 				elif key == 'turn_direction':
 					turn_direction_tag = value
 				elif key == 'one_way':
-					one_way_tag = True if value == 'true' else False
+					one_way_tag = True if value == 'yes' else False
 				elif key == 'participant:vehicle':
-					vehicle_tag = True if value == 'true' else False
+					vehicle_tag = True if value == 'yes' else False
 				elif key == 'participant:pedestrian':
 					pedestrian_tag = True if value == 'yes' else False
 				elif key == 'participant:bicycle':
