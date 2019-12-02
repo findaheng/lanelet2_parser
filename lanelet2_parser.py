@@ -417,18 +417,22 @@ class MapData:
 				member_role = member.get('role')
 				ref_id = int(member.get('ref'))
 
-				if member_role == 'left':
-					lanelet.left_bound = self.linestrings[ref_id]
-				elif member_role == 'right':
-					lanelet.right_bound = self.linestrings[ref_id]
-				elif member_role == 'centerline':
-					lanelet.centerline = self.linestrings[ref_id]
-				elif member_role == 'regulatory_element':
+				if member_role == 'regulatory_element':
 					try:
 						reg_elem = self.regulatory_elements[ref_id]
 						lanelet.regulatory_elements.append(reg_elem)
 					except:
 					 	self._todo_lanelets_regelems.append((id_, ref_id))  # regulatory element not yet parsed -> add after parsing complete
+					continue
+
+				linestr = self.linestrings[ref_id]
+				linestr._add_reference(id_)
+				if member_role == 'left':
+					lanelet.left_bound = linestr
+				elif member_role == 'right':
+					lanelet.right_bound = linestr
+				elif member_role == 'centerline':
+					lanelet.centerline = linestr
 				else:
 					raise RuntimeError(f'Unknown member role in lanelet with id={id_}')
 
@@ -571,7 +575,7 @@ class MapData:
 			__ref_points = [self.points[id_] for id_ in __ref_point_ids]
 			ref_point_coords = [(L2_point.point.x, L2_point.point.y) for L2_point in __ref_points]
 			
-			area_tag = False  # area='yes' tag indicates polygon
+			area_tag = False  # NOTE: area='yes' tag indicates polygon
 			type_tag = None
 			subtype_tag = None
 			for tag in way.iter('tag'):
