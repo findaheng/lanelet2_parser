@@ -41,7 +41,7 @@ class L2_Linestring:
 		# list of lanelet id's that reference this linestring as a bound
 		self._lanelet_references = []
 
-	def _add_reference(lanelet_id):
+	def __add_reference(lanelet_id):
 		assert isinstance(lanelet_id, int) or isinstance(lanelet_id, float)
 		self._lanelet_references.append(lanelet_id)
 
@@ -82,16 +82,36 @@ class Lanelet():
 		self.one_way = one_way
 		self.turn_direction = turn_direction
 		self.pedestrian_participant = pedestrian_participant
-		self.bicycle_participant = bicycle_participant
-		self.left_bound = left_bound  # L2_Linestring
-		self.right_bound = right_bound  # L2_Linestring
-		self.centerline = centerline  # L2_Linestring
 		self.regulatory_elements = regulatory_elements
 		self.buffer_ = buffer_
+		self.bicycle_participant = bicycle_participant
+
+		# L2_Linestring
+		self.left_bound = left_bound
+		self.right_bound = right_bound
+		self.centerline = centerline
+
+		# NOTE: both left and right linestrings must point in the same direction
+		# used to handle inversion of linestring points order
+		self._flip_left = False
+		self._flip_right = False
 
 		# calculated fields for property methods
 		self._polygon = None
 		self._cells = []
+
+	def __has_opposing_linestrings():
+		''' Helper method to determine if a lanelet's left and right bounds
+		are pointing in opposite directions '''
+
+		left_bound_coords = list(self.left_bound.linestring.coords)
+		right_bound_coords = list(self.right_bound.linestring.coords)
+
+		left_head = Point(left_bound_coords[-1])  # last point of the left bound 
+		right_tail = Point(right_bound_coords[0])  # first point of the right bound
+		right_head = Point(right_bound_coords[-1])  # last point of the right bound
+
+		return True if left_head.distance(right_head) > left_head.distance(right_tail) else False
 
 	@property
 	def polygon(self):
@@ -101,18 +121,8 @@ class Lanelet():
 		left_bound_coords = list(self.left_bound.linestring.coords)
 		right_bound_coords = list(self.right_bound.linestring.coords)
 
-		''' NOTE: 
-		(*)	Noticed that when always reversed the right bound, some of the
-		lanelet polygons were Z-shaped instead of rectangular.
-		(*)	Determined that there must not be a defined convention in the Lanelet2 format
-		for the order in which points were given.
-		(*)	Reversal will occur if bound "vectors" are not currently oriented head-to-tail,
-		which can be determined by comparing the distance of the left bound vector-head
-		to the head and tail of the right bound vector. '''
-		left_head = Point(left_bound_coords[-1])  # last point of the left bound 
-		right_tail = Point(right_bound_coords[0])  # first point of the right bound
-		right_head = Point(right_bound_coords[-1])  # first point of the right bound
-		if left_head.distance(right_head) < left_head.distance(right_tail):
+		# reversal will occur if bounds point the same direction
+		if not __has_opposing_linestrings():
 			right_bound_coords.reverse()
 
 		left_bound_coords.extend(right_bound_coords)
@@ -426,7 +436,7 @@ class MapData:
 					continue
 
 				linestr = self.linestrings[ref_id]
-				linestr._add_reference(id_)
+				linestr.__add_reference(id_)
 				if member_role == 'left':
 					lanelet.left_bound = linestr
 				elif member_role == 'right':
@@ -460,6 +470,8 @@ class MapData:
 			self.regulatory_elements[id_] = RegulatoryElement(id_, subtype, fallback)
 
 		def __execute_todo():
+			''' Handle parsing that errored because of a reference to an element not yet parsed '''
+
 			for lanelet_id, reg_elem_id in self._todo_lanelets_regelems:
 				try:
 					lanelet = self.lanelets[lanelet_id]
@@ -467,6 +479,27 @@ class MapData:
 					lanelet.regulatory_elements.append(reg_elem)
 				except:
 					raise RuntimeError(f'Unknown regulatory element with id={reg_elem_id} referenced in lanelet with id={lanelet_id}')
+
+		def __mark_lanelet_inversions():
+			''' Ensure lanelet bounds point in the same direction, 
+			otherwise mark which to flip by changing lanelet's fields '''
+			
+			for lanelet in self.lanelets.values():
+				if lanelet.__has_opposing_linestrings():
+					found_in_left = False
+
+					for id_ in lanelet.left_bound._lanelet_references:
+						other_lanelet = self.lanelets[id_]
+
+						# TODO: ca
+
+						if True:
+							lanelet._flip_left = True
+							found_in_left = True
+							break
+
+					if not found_in_left:
+						lanelet._flip_right = True
 
 		def __align_lanelets(align_range):
 			''' Align lanelet bounds to overlap exactly '''
@@ -645,5 +678,10 @@ class MapData:
 			else:
 				raise RuntimeError(f'Unknown relation type with id={relation_id}')
 
+		# # # # # # # # # # #
+		# MARK : - EPILOGUE #
+		# # # # # # # # # # #
+
 		__execute_todo()  # add stored unparsed regulatory elements to corresponding lanelets
+		__mark_lanelet_inversions()  # mark which linestring bounds need to be flipped for heading calculations
 		__align_lanelets(align_range)  # ensure lanelet endpoints overlap exactly
