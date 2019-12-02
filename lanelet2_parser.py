@@ -514,7 +514,7 @@ class MapData:
 
 			# re-compute polygons
 			for lanelet in self.lanelets.values():
-				#lanelet._polygon = None  # FIXME: calculation creates self-intersection error with Shapely polygons for lanelets
+				lanelet._polygon = None  # FIXME: calculation creates self-intersection error with Shapely polygons for lanelets
 				assert lanelet.polygon
 			self._drivable_polygon = None
 			assert self.drivable_polygon
