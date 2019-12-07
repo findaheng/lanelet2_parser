@@ -15,8 +15,8 @@ import matplotlib.pyplot as plt
 
 if __name__ == '__main__':
 	path = './maps/example_map.osm'
-	data = parser.MapData()
-	data.parse(path)
+	data = parser.MapData(buffer_=0)
+	data.parse(path, align_range=0.5)
 
 	print(f'\nParsing file with path \'{path}\' ...\n')
 	print(f'Points: {len(data.points)}')
@@ -27,5 +27,5 @@ if __name__ == '__main__':
 	print(f'Regulatory elements: {len(data.regulatory_elements)}\n')
 	print('... Parsing Complete\n')
 
-	data.plot()
+	data.plot(type_='line')
 	

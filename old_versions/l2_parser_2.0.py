@@ -9,16 +9,14 @@ from shapely.ops import cascaded_union
 
 	Parses an OSM-XML file that uses the Lanelet2 framework 
 	and stores its data as fields of a MapData class.
+
+	V 2.0 -- Cell-based structure (abandoned because of inconsistent unions,
+	ie. lanelet-based structure was more reliable)
 	-----
 	@author Francis Indaheng
 	
 	Developed with VeHICaL and all associated 
 	groups, projects, and persons.
-	-----
-	TODO: 
-		- fix heading compution
-		- look into sidewalks in lanelet2 format
-		- process crosswalks beyond as lanelets
 """
 
 class L2_Point:
@@ -42,25 +40,6 @@ class L2_Linestring:
 		self.linestring = linestring  # Shapely LineString
 		self.type_ = type_ 
 		self.subtype = subtype
-
-		# list of lanelet id's that reference this linestring as a bound
-		self._lanelet_references = []
-
-	def _add_reference(self, lanelet_id):
-		assert isinstance(lanelet_id, int) or isinstance(lanelet_id, float)
-		self._lanelet_references.append(lanelet_id)
-
-	def _opposes(self, l2_linestring):
-		''' Determines if parameter-linestring opposes self-linestring in heading '''
-
-		self_coords = list(self.linestring.coords)
-		param_coords = list(l2_linestring.linestring.coords)
-
-		self_head = Point(self_coords[-1])  # last point of the self-linestring 
-		param_tail = Point(param_coords[0])  # first point of the parameter-linestring
-		param_head = Point(param_coords[-1])  # last point of the parameter-linestring
-
-		return True if self_head.distance(param_head) > self_head.distance(param_tail) else False
 
 
 class L2_Polygon:
@@ -87,10 +66,10 @@ class Lanelet():
 			self.heading = heading  # radians clockwise from y-axis
 
 
-	def __init__(self, id_, subtype, \
-					region, location, one_way, turn_direction, \
-					vehicle_participant, pedestrian_participant, bicycle_participant, \
-					left_bound=None, right_bound=None, centerline=None, \
+	def __init__(self, id_, subtype, 
+					region, location, one_way, turn_direction,
+					vehicle_participant, pedestrian_participant, bicycle_participant, 
+					left_bound=None, right_bound=None, centerline=None, 
 					regulatory_elements=[], buffer_=0):
 		self.id_ = id_
 		self.subtype = subtype
@@ -99,51 +78,21 @@ class Lanelet():
 		self.one_way = one_way
 		self.turn_direction = turn_direction
 		self.pedestrian_participant = pedestrian_participant
+		self.bicycle_participant = bicycle_participant
+		self.left_bound = left_bound  # L2_Linestring
+		self.right_bound = right_bound  # L2_Linestring
+		self.centerline = centerline  # L2_Linestring
 		self.regulatory_elements = regulatory_elements
 		self.buffer_ = buffer_
-		self.bicycle_participant = bicycle_participant
-
-		# L2_Linestring
-		self.left_bound = left_bound
-		self.right_bound = right_bound
-		self.centerline = centerline
-
-		# NOTE: both left and right linestrings must point in the same direction
-		# used to handle inversion of linestring points order
-		self._flip_left = False
-		self._flip_right = False
 
 		# calculated fields for property methods
 		self._polygon = None
 		self._cells = []
 
-	def _has_opposing_linestrings(self):
-		''' Determines if a lanelet's left and right bounds have opposing headings '''
-
-		left_bound_coords = list(self.left_bound.linestring.coords)
-		right_bound_coords = list(self.right_bound.linestring.coords)
-
-		left_head = Point(left_bound_coords[-1])  # last point of the left bound 
-		right_tail = Point(right_bound_coords[0])  # first point of the right bound
-		right_head = Point(right_bound_coords[-1])  # last point of the right bound
-
-		return True if left_head.distance(right_head) > left_head.distance(right_tail) else False
-
 	@property
 	def polygon(self):
-		if self._polygon:
-			return self._polygon
-
-		left_bound_coords = list(self.left_bound.linestring.coords)
-		right_bound_coords = list(self.right_bound.linestring.coords)
-
-		# reversal will occur if bounds point the same direction
-		if not self._has_opposing_linestrings():
-			right_bound_coords.reverse()
-
-		left_bound_coords.extend(right_bound_coords)
-		self._polygon = Polygon(left_bound_coords).buffer(self.buffer_)
-
+		if not self._polygon:
+			self._polygon = cascaded_union([cell.polygon for cell in self.cells])  # returns either a Shapely Polygon or MultiPolygon
 		return self._polygon
 
 	@property
@@ -267,16 +216,16 @@ class MapData:
 		self._drivable_polygon = None  # for interface's drivable polygonal region 
 		self._cells = []    # for interface's polygonal vector field
 
-		# store id's of regulatory elements to add to a lanelet objects after parsing completes (to ensure regulatory elements have been processed)
+		# store id's of regulatory elements to add to a lanelet objects after parsing completes (such that the regulatory elements have been processed)
 		self._todo_lanelets_regelems = []  # list of tuples in the form: (lanelet id, regulatory_element id)
 
 	@property
-	def drivable_polygon(self):
+	def drivable_polygon(self): 
 		if self._drivable_polygon:
 			return self._drivable_polygon
 
-		lanelet_polygons = [lanelet.polygon for lanelet in self.lanelets.values() if lanelet.subtype != 'crosswalk']
-		self._drivable_polygon = cascaded_union(lanelet_polygons)  # returns either a Shapely Polygon or MultiPolygon
+		cell_polygons = [cell[0] for cell in self.cells]
+		self._drivable_polygon = cascaded_union(cell_polygons)  # returns either a Shapely Polygon or MultiPolygon
 
 		return self._drivable_polygon
 
@@ -292,7 +241,7 @@ class MapData:
 
 		return self._cells
 				
-	def plot(self, is_show=True, c='r', type_='drivable', just_points=False):
+	def plot(self, is_show=True, c='r', _type='drivable', just_points=False):
 		''' Plot polygon representations of data fields on Matplotlib '''
 
 		# # # # # # # # # # # # # # 
@@ -385,16 +334,16 @@ class MapData:
 		for poly in self.polygons.values():
 			__plot_polygon(poly.polygon, just_points)
 
-		if type_ == 'drivable':
+		if _type == 'drivable':
 			__plot_drivable_polygon(just_points)
-		elif type_ == 'lane':
+		elif _type == 'lane':
 			__plot_lanelets(just_points)
-		elif type_ == 'cell':
+		elif _type == 'cell':
 			__plot_cells(just_points)
-		elif type_ == 'line':
+		elif _type == 'line':
 			__plot_linestrings(just_points)
 		else:
-			raise RuntimeError("type_ can only take values 'drivable', 'lane', 'cell', and 'line'")
+			raise RuntimeError("_type can only take values 'drivable', 'lane', 'cell', and 'line'")
 
 		for area in self.areas.values():
 			__plot_polygon(area.polygon, just_points)
@@ -409,7 +358,7 @@ class MapData:
 		# MARK : - HELPER METHODS #
 		# # # # # # # # # # # # # #
 
-		def _extract_point(id_, lon, lat, x, y, z, type_, subtype):
+		def __extract_point(id_, lon, lat, x, y, z, type_, subtype):
 			''' Converts longitude and latitude to meters if x and y are unspecified'''
 
 			if x and y:
@@ -428,48 +377,40 @@ class MapData:
 			shapely_geo_point = Point(lon, lat)
 			self.points[id_] = L2_Point(id_, shapely_metric_point, shapely_geo_point, type_, subtype)
 
-		def _extract_polygon(id_, polygon_coords, type_, subtype):
+		def __extract_polygon(id_, polygon_coords, type_, subtype):
 			shapely_polygon = Polygon(polygon_coords)
 			self.polygons[id_] = L2_Polygon(id_, shapely_polygon, type_, subtype)
 
-		def _extract_linestring(id_, linestring_coords, type_, subtype):
+		def __extract_linestring(id_, linestring_coords, type_, subtype):
 			shapely_linestring = LineString(linestring_coords)
 			self.linestrings[id_] = L2_Linestring(id_, shapely_linestring, type_, subtype)
 
-		def _extract_lanelet(id_, subtype, region, location, \
-							 one_way, turn_dir, vehicle, \
-							 pedestrian, bicycle, relation_element):
-			lanelet = Lanelet(id_, subtype, region, location, \
-							  one_way, turn_dir, vehicle, \
-							  pedestrian, bicycle, buffer_=self.buffer_)
+		def __extract_lanelet(id_, subtype, region, location, one_way, turn_dir, vehicle, pedestrian, bicycle, relation_element):
+			lanelet = Lanelet(id_, subtype, region, location, one_way, turn_dir, vehicle, pedestrian, bicycle, buffer_=self.buffer_)
 
 			for member in relation_element.iter('member'):
 				member_role = member.get('role')
 				ref_id = int(member.get('ref'))
 
-				if member_role == 'regulatory_element':
+				if member_role == 'left':
+					lanelet.left_bound = self.linestrings[ref_id]
+				elif member_role == 'right':
+					lanelet.right_bound = self.linestrings[ref_id]
+				elif member_role == 'centerline':
+					lanelet.centerline = self.linestrings[ref_id]
+				elif member_role == 'regulatory_element':
 					try:
 						reg_elem = self.regulatory_elements[ref_id]
 						lanelet.regulatory_elements.append(reg_elem)
 					except:
 					 	self._todo_lanelets_regelems.append((id_, ref_id))  # regulatory element not yet parsed -> add after parsing complete
-					continue
-
-				linestr = self.linestrings[ref_id]
-				linestr._add_reference(id_)
-				if member_role == 'left':
-					lanelet.left_bound = linestr
-				elif member_role == 'right':
-					lanelet.right_bound = linestr
-				elif member_role == 'centerline':
-					lanelet.centerline = linestr
 				else:
 					raise RuntimeError(f'Unknown member role in lanelet with id={id_}')
 
 			assert lanelet.left_bound and lanelet.right_bound, f'Lanelet with id={id_} missing bound(s)'  
 			self.lanelets[id_] = lanelet
 
-		def _extract_area(id_, relation_element):
+		def __extract_area(id_, relation_element):
 			for member in relation_element.iter('member'):
 				member_role = member.get('role')
 				ref_id = int(member.get('ref'))
@@ -486,12 +427,10 @@ class MapData:
 
 			self.areas[id_] = Area(id_, outer, inner)
 
-		def _extract_regulatory_element(id_, subtype, fallback):
+		def __extract_regulatory_element(id_, subtype, fallback):
 			self.regulatory_elements[id_] = RegulatoryElement(id_, subtype, fallback)
 
 		def __execute_todo():
-			''' Handle parsing that errored because of a reference to an element not yet parsed '''
-
 			for lanelet_id, reg_elem_id in self._todo_lanelets_regelems:
 				try:
 					lanelet = self.lanelets[lanelet_id]
@@ -499,27 +438,6 @@ class MapData:
 					lanelet.regulatory_elements.append(reg_elem)
 				except:
 					raise RuntimeError(f'Unknown regulatory element with id={reg_elem_id} referenced in lanelet with id={lanelet_id}')
-
-		def __mark_lanelet_inversions():
-			''' Ensure lanelet bounds point in the same direction, 
-			otherwise mark which to flip by changing lanelet's fields '''
-			
-			for lanelet in self.lanelets.values():
-				if lanelet._has_opposing_linestrings():
-
-					# TODO: incorrect logic, what if left bound is not referenced by any other?
-
-					# NOTE: can assume exactly two references exist
-					other_id = list(filter(lambda id_: id_ != lanelet.id_, lanelet.left_bound._lanelet_references))[0]
-					other_lanelet = self.lanelets[other_id]
-
-					# TODO: determine which bound of other_lanelet to use in _opposes() comparison
-					opposing_linestring = None
-
-					if not opposing_linestring._opposes(lanelet.left_bound.linestring):
-						lanelet._flip_left = True
-					else:
-						lanelet._flip_right = True  # since 
 
 		def __align_lanelets(align_range):
 			''' Align lanelet bounds to overlap exactly '''
@@ -620,7 +538,7 @@ class MapData:
 				else:
 					print(f'Unhandled node tag with key={key}')
 
-			_extract_point(node_id, node_lat, node_lon, x_tag, y_tag, ele_tag, type_tag, subtype_tag)
+			__extract_point(node_id, node_lat, node_lon, x_tag, y_tag, ele_tag, type_tag, subtype_tag)
 
 		for way in root.iter('way'):
 			way_id = int(way.get('id'))
@@ -628,7 +546,7 @@ class MapData:
 			__ref_points = [self.points[id_] for id_ in __ref_point_ids]
 			ref_point_coords = [(L2_point.point.x, L2_point.point.y) for L2_point in __ref_points]
 			
-			area_tag = False  # NOTE: area='yes' tag indicates polygon
+			area_tag = False  # area='yes' tag indicates polygon
 			type_tag = None
 			subtype_tag = None
 			for tag in way.iter('tag'):
@@ -645,9 +563,9 @@ class MapData:
 					print(f'Unhandled way tag with key={key}')
 
 			if area_tag:  # polygon
-				_extract_polygon(way_id, ref_point_coords, type_tag, subtype_tag)
+				__extract_polygon(way_id, ref_point_coords, type_tag, subtype_tag)
 			else:  # linestring
-				_extract_linestring(way_id, ref_point_coords, type_tag, subtype_tag)
+				__extract_linestring(way_id, ref_point_coords, type_tag, subtype_tag)
 
 		for relation in root.iter('relation'):
 			relation_id = int(relation.get('id'))
@@ -690,20 +608,13 @@ class MapData:
 					print(f'Unhandled relation tag with key={key}')
 
 			if type_tag == 'lanelet':
-				_extract_lanelet(relation_id, subtype_tag, region_tag, \
-								 location_tag, one_way_tag, turn_direction_tag, \
-								 vehicle_tag, pedestrian_tag, bicycle_tag, relation)
+				__extract_lanelet(relation_id, subtype_tag, region_tag, location_tag, one_way_tag, turn_direction_tag, vehicle_tag, pedestrian_tag, bicycle_tag, relation)
 			elif type_tag == 'multipolygon':  # area
-				_extract_area(relation_id, relation)
+				__extract_area(relation_id, relation)
 			elif type_tag == 'regulatory_element':
-				_extract_regulatory_element(relation_id, subtype_tag, fallback_tag)
+				__extract_regulatory_element(relation_id, subtype_tag, fallback_tag)
 			else:
 				raise RuntimeError(f'Unknown relation type with id={relation_id}')
 
-		# # # # # # # # # # #
-		# MARK : - EPILOGUE #
-		# # # # # # # # # # #
-
 		__execute_todo()  # add stored unparsed regulatory elements to corresponding lanelets
-		__mark_lanelet_inversions()  # mark which linestring bounds need to be flipped for heading calculations
 		__align_lanelets(align_range)  # ensure lanelet endpoints overlap exactly
