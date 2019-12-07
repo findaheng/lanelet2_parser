@@ -16,6 +16,7 @@ from shapely.ops import cascaded_union
 	groups, projects, and persons.
 	-----
 	TODO: 
+		- fix mark align method
 		- fix heading compution
 		- look into sidewalks in lanelet2 format
 		- process crosswalks beyond as lanelets
