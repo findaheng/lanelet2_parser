@@ -15,11 +15,6 @@ from shapely.ops import cascaded_union
 	Developed with VeHICaL and all associated 
 	groups, projects, and persons.
 	-----
-	TODO: 
-		- fix mark align method
-		- fix heading compution
-		- look into sidewalks in lanelet2 format
-		- process crosswalks beyond as lanelets
 """
 
 class L2_Point:
@@ -152,6 +147,9 @@ class Lanelet():
 		if self._cells:
 			return self._cells
 
+		# reverse left bound if opposed
+		left_bound_linestr = LineString(self.left_bound.linestring.coords[::-1]) if self._has_opposing_linestrings() else self.left_bound.linestring
+
 		# determine linestring with more points		
 		num_right_pts = len(self.right_bound.linestring.coords)  
 		num_left_pts = len(self.left_bound.linestring.coords) 
@@ -159,20 +157,20 @@ class Lanelet():
 		if num_right_pts > num_left_pts:
 			right_has_more = True
 			more_pts_linestr = self.right_bound.linestring
-			less_pts_linestr = self.left_bound.linestring 
+			less_pts_linestr = left_bound_linestr 
 		else:
-			more_pts_linestr = self.left_bound.linestring
+			more_pts_linestr = left_bound_linestr
 			less_pts_linestr = self.right_bound.linestring
+
+		less_first_pt = Point(less_pts_linestr.coords[0][0], less_pts_linestr.coords[0][1])  
+		less_second_pt = Point(less_pts_linestr.coords[1][0], less_pts_linestr.coords[1][1])  
+		less_last_pt = Point(less_pts_linestr.coords[-1][0], less_pts_linestr.coords[-1][1])  
 
 		# connect points from linestring (with more points) to other linestring (that has less points)
 		more_pts_coords = more_pts_linestr.coords
 		for i in range(len(more_pts_coords) - 1):
 			curr_pt = Point(more_pts_coords[i][0], more_pts_coords[i][1])  # convert to Shapely point
 			next_pt = Point(more_pts_coords[i + 1][0], more_pts_coords[i + 1][1])  # to compute second bound and heading
-
-			less_first_pt = Point(less_pts_linestr.coords[0][0], less_pts_linestr.coords[0][1])  
-			less_second_pt = Point(less_pts_linestr.coords[1][0], less_pts_linestr.coords[1][1])  
-			less_last_pt = Point(less_pts_linestr.coords[-1][0], less_pts_linestr.coords[-1][1])  
 
 			# compute closest point on other linestring
 			# endpoints guarantee other point is a coordinate of linestring
@@ -189,7 +187,7 @@ class Lanelet():
 
 			cell_polygon = Polygon([(p.x, p.y) for p in [curr_pt, next_pt, bound_pt_1, bound_pt_2]]).buffer(self.buffer_)
 
-			# FIXME: (assuming) can define heading based on lanelet's right bound
+			# NOTE: (assuming) can define heading based on lanelet's right bound
 			delta_x = next_pt.x - curr_pt.x if right_has_more else less_second_pt.x - less_first_pt.x
 			delta_y = next_pt.y - curr_pt.y if right_has_more else less_second_pt.y - less_first_pt.y
 			cell_heading = math.atan(delta_y / delta_x) + math.pi / 2 if delta_x else 0 # since headings in radians clockwise from y-axis
@@ -254,7 +252,8 @@ class MapData:
 		self.points = {}  # L2_Points
 		self.linestrings = {}  #L2_Linestrings
 		self.polygons = {}  # L2_Polygons
-		self.lanelets = {}
+		self.lanelets = {}  # drivable lanelets (i.e. excludes sidewalks, crosswalks, etc.)
+		self.crosswalks = {}
 		self.areas = {}
 		self.regulatory_elements = {}
 
@@ -374,6 +373,10 @@ class MapData:
 		def __plot_linestring_points(linestring):
 			assert isinstance(linestring, LineString)  # Shapely LineString
 
+			# NOTE: hack for AttributeError: 'list' object has no attribute 'xy'
+			if not linestring.coords:
+				return 
+
 			x, y = linestring.coords.xy
 			coords_map = zip(x, y)
 			for i, coords in enumerate(coords_map):
@@ -467,8 +470,11 @@ class MapData:
 				else:
 					raise RuntimeError(f'Unknown member role in lanelet with id={id_}')
 
-			assert lanelet.left_bound and lanelet.right_bound, f'Lanelet with id={id_} missing bound(s)'  
-			self.lanelets[id_] = lanelet
+			assert lanelet.left_bound and lanelet.right_bound, f'Lanelet with id={id_} missing bound(s)' 
+			if subtype == 'crosswalk':
+				self.crosswalks[id_] = lanelet
+			else: 
+				self.lanelets[id_] = lanelet
 
 		def _extract_area(id_, relation_element):
 			for member in relation_element.iter('member'):
@@ -501,26 +507,29 @@ class MapData:
 				except:
 					raise RuntimeError(f'Unknown regulatory element with id={reg_elem_id} referenced in lanelet with id={lanelet_id}')
 
-		def __mark_lanelet_inversions():
-			''' Ensure lanelet bounds point in the same direction, 
-			otherwise mark which to flip by changing lanelet's fields '''
+		# def __mark_lanelet_inversions():
+		# 	''' Ensure lanelet bounds point in the same direction, 
+		# 	otherwise mark which to flip by changing lanelet's fields '''
 			
-			for lanelet in self.lanelets.values():
-				if lanelet._has_opposing_linestrings():
+		# 	for lanelet in self.lanelets.values():
+		# 		if lanelet._has_opposing_linestrings():
+		# 			refs = lanelet.left_bound._lanelet_references if len(lanelet.left_bound._lanelet_references) > 1 else lanelet.right_bound._lanelet_references
 
-					# TODO: incorrect logic, what if left bound is not referenced by any other?
+		# 			# NOTE: can assume exactly two references exist
+		# 			other_id = list(filter(lambda id_: id_ != lanelet.id_, refs))[0]
+		# 			other_lanelet = self.lanelets[other_id]
 
-					# NOTE: can assume exactly two references exist
-					other_id = list(filter(lambda id_: id_ != lanelet.id_, lanelet.left_bound._lanelet_references))[0]
-					other_lanelet = self.lanelets[other_id]
+		# 			# TODO: determine which bound of other_lanelet to use in _opposes() comparison
+		# 			curr_left_linestr = lanelet.left_bound.linestring
+		# 			curr_right_linestr = lanelet.right_bound.linestring
+		# 			other_left_linestr = other_lanelet.left_bound.linestring
+		# 			other_right_linestr = other_lanelet.right_bound.linestring
+		# 			opposing_linestring = other_left_linestr if curr_left_linestr is other_left_linestr
 
-					# TODO: determine which bound of other_lanelet to use in _opposes() comparison
-					opposing_linestring = None
-
-					if not opposing_linestring._opposes(lanelet.left_bound.linestring):
-						lanelet._flip_left = True
-					else:
-						lanelet._flip_right = True  # since 
+		# 			if not opposing_linestring._opposes(lanelet.left_bound.linestring):
+		# 				lanelet._flip_left = True
+		# 			else:
+		# 				lanelet._flip_right = True  # since 
 
 		def __align_lanelets(align_range):
 			''' Align lanelet bounds to overlap exactly '''
@@ -706,5 +715,5 @@ class MapData:
 		# # # # # # # # # # #
 
 		__execute_todo()  # add stored unparsed regulatory elements to corresponding lanelets
-		__mark_lanelet_inversions()  # mark which linestring bounds need to be flipped for heading calculations
+		#__mark_lanelet_inversions()  # mark which linestring bounds need to be flipped for heading calculations
 		__align_lanelets(align_range)  # ensure lanelet endpoints overlap exactly
